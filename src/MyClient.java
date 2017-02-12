@@ -9,6 +9,7 @@ import java.io.InputStream;
 import java.io.ObjectOutputStream;
 import java.io.OutputStream;
 import java.net.Socket;
+import java.util.Random;
 
 
 
@@ -16,6 +17,7 @@ import java.net.Socket;
 public class MyClient {
 	private static int portNum = 8084;
 	private static String serverName = "192.168.1.4";
+	private static int framesSent = 1;
 
 
 	public static void main(String[] args) throws IOException{
@@ -24,18 +26,32 @@ public class MyClient {
 		FileInputStream in = null;
 		FileOutputStream out = null;
 		byte[] bytes = new byte[8];
-
+		short byteCounter = 0;
+		short sequenceNumber = 0;
 		try {
 			in = new FileInputStream("src/data.txt");
 			out = new FileOutputStream("src/output.txt");
-			//int c;
-			//int byteCounter=0;
-			int sequenceNumber = 0;
-			while ( in.read(bytes) != -1) {
-				out.write(bytes);
-				sequenceNumber++;
+			int c;
+			while ((c = in.read()) != -1) {
+				bytes[byteCounter] = (byte)c;
+				byteCounter++;
+				if(byteCounter == 8){
+					Frame frame = new Frame(sequenceNumber, byteCounter, bytes);
+					sendFrame(frame);
+					out.write(bytes);
+					sequenceNumber++;
+					byteCounter = 0;
+				}
 			}
 		} finally {
+			if(byteCounter != 0){
+				System.out.println("Remaining bytes = " + byteCounter);
+				for(int i=0;i<byteCounter;i++){
+					Frame frame = new Frame(sequenceNumber, byteCounter, bytes);
+					sendFrame(frame);
+					out.write(bytes[i]);
+				}
+			}
 			if (in != null) {
 				in.close();
 			}
@@ -46,7 +62,7 @@ public class MyClient {
 
 
 		// Create frame from text file (auto computes crc)
-		Frame frame = new Frame("textfile.txt");
+		/*Frame frame = new Frame("textfile.txt");
 
 		String sequenceNumberBinary = frame.getSequenceNumberBinary();
 		String payloadLengthBinary = frame.getPayloadLengthBinary();
@@ -99,6 +115,51 @@ public class MyClient {
 
 		} catch (Exception exception){
 			System.out.println("Sending data failed - " + exception);
+		}*/
+	}
+	
+	private static void sendFrame(Frame frame){
+		try{
+			System.out.println("Attempting to connect to " + serverName + " on port " + portNum);
+			Socket client = new Socket(serverName, portNum);
+			System.out.println("Connected to " + client.getRemoteSocketAddress());
+
+			DataInputStream dataInputStream = new DataInputStream(client.getInputStream());
+			DataOutputStream dataOutputStream = new DataOutputStream(client.getOutputStream());
+
+			// Retrieve Welcome message
+			System.out.println();
+			System.out.println(dataInputStream.readUTF());
+			System.out.println();
+
+			// Send the frame
+			System.out.println("Attempting to send the frame");
+			ObjectOutputStream objectOutputStream = new ObjectOutputStream(dataOutputStream);
+			gremlin(frame);
+			objectOutputStream.writeObject(frame);
+			framesSent++;
+			System.out.println("Frame sent to server");
+
+
+			System.out.println();
+			System.out.println("Awaiting Server Response..");
+			System.out.println(dataInputStream.readUTF());
+			System.out.println(dataInputStream.readUTF());
+			System.out.println();
+			System.out.println();
+
+			client.close();
+
+
+		} catch (Exception exception){
+			System.out.println("Sending data failed - " + exception);
+		}
+	}
+	
+	private static void gremlin(Frame frame){
+		if(new Random().nextInt(10) > 5 ){
+			System.out.println("GREMLIN on frame " + framesSent);
+			frame.setRemainder((short)0xffff);
 		}
 	}
 }

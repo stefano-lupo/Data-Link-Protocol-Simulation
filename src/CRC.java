@@ -6,7 +6,8 @@ public class CRC {
 	
 	private final static String intLengthFormatString = "%32s"
 			, shortLengthFormatString = "%16s"
-			, longLengthFormatString = "%64s";
+			, longLengthFormatString = "%64s"
+			, byteLengthFormatString = "%8s";
 	
 	/** 
 	 * Computes remainder using CRC 16 Generator polynomial
@@ -15,11 +16,16 @@ public class CRC {
 	 * @param data Data to be sent in this frame
 	 * @return FCS
 	 */
-	public static Short performCRC(short sequenceNumber, short payloadLength, long data) {
+	public static Short performCRC(short sequenceNumber, short payloadLength, byte[] data) {
 		// Generate Strings of binary from data
 		String sequenceNumberString = String.format(shortLengthFormatString, Integer.toBinaryString(sequenceNumber)).replace(" ", "0");
 		String payloadLengthString = String.format(shortLengthFormatString, Integer.toBinaryString(payloadLength)).replace(" ", "0");
-		String dataString = String.format(longLengthFormatString, Long.toBinaryString(data)).replace(" ", "0");
+		String dataString = "";
+		for(int i=0;i<data.length;i++){
+			dataString+= String.format(byteLengthFormatString, Integer.toBinaryString(data[i])).replace(" ", "0");
+		}
+		//System.out.println("New Data String = " + dataString);
+		//String dataString = String.format(longLengthFormatString, Long.toBinaryString(data)).replace(" ", "0");
 		String full = sequenceNumberString + payloadLengthString + dataString;
 		
 		// Create Generator binary string and substring of generator binary to be used with XOR (ignores 1st digit)
@@ -127,6 +133,13 @@ public class CRC {
 		return String.format(longLengthFormatString, Long.toBinaryString(d)).replace(" ", "0");
 	}
 	
+	public static String byteArrayToBinary(byte[] bytes){
+		String dataString = "";
+		for(int i=0;i<bytes.length;i++){
+			dataString+= String.format(byteLengthFormatString, Integer.toBinaryString(bytes[i])).replace(" ", "0");
+		}
+		return dataString;
+	}
 
 	
 

@@ -19,16 +19,20 @@ public class Frame implements Serializable{
 	
 	private short sequenceNumber;
 	private short payloadLength;
-	private long data;
+//	private long data;
+	private byte[] data;
 	private short remainder;
 
 	
-	public Frame(String textfile) {
+	public Frame(short sequenceNumber, short payloadLength, byte[] data) {
 		// Read from text file containing data
-		this.sequenceNumber = 1;
-		this.payloadLength = 8;
-		this.data = 1234567891234567890L;
-		this.remainder = CRC.performCRC(sequenceNumber, payloadLength, data);
+//		this.sequenceNumber = 1;
+//		this.payloadLength = 8;
+//		this.data = 1234567891234567890L;
+		this.sequenceNumber = sequenceNumber;
+		this.payloadLength = payloadLength;
+		this.data = data;
+		this.remainder = CRC.performCRC(this.sequenceNumber, this.payloadLength, this.data);
 	}
 	
 
@@ -45,12 +49,16 @@ public class Frame implements Serializable{
 		return CRC.shortToBinary(payloadLength);
 	}
 	
-	public long getData(){
-		return data;
+	public String getData(){
+		String string = "";
+		for(int i=0;i<data.length;i++){
+			string += (char)data[i];
+		}
+		return string;
 	}
 	
 	public String getDataBinary() {
-		return CRC.longToBinary(data);
+		return CRC.byteArrayToBinary(data);
 	}
 	
 	public String getRemainderBinary() {
@@ -71,5 +79,12 @@ public class Frame implements Serializable{
 		return getSequenceNumberBinary() + getPayloadLengthBinary() + getDataBinary() + getRemainderBinary();
 	}
 	
+	/**
+	 * Sets the remainder to specified value. Used by gremlin function only
+	 * @param s remainder to be set
+	 */
+	public void setRemainder(short s){
+		this.remainder = s;
+	}
 	
 }

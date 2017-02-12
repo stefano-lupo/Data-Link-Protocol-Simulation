@@ -8,15 +8,18 @@ import java.io.ObjectInputStream;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketTimeoutException;
+import java.util.ArrayList;
 
 public class MyServer extends Thread{
 	private ServerSocket serverSocket;
 	private static int portNum = 8084;
 	
+	private ArrayList<Frame> frames;
 	private Frame frame;
 	
 
 	public MyServer(int port) throws IOException {
+		frames = new ArrayList<>();
 		System.out.println("-------------------------Server--------------------------------");
 		serverSocket = new ServerSocket(portNum);
 //		serverSocket.setSoTimeout();
@@ -45,6 +48,7 @@ public class MyServer extends Thread{
 				try {
 					System.out.println("Waiting for frame from client..");
 					frame = (Frame)objectInputStream.readObject();
+					frames.add(frame);
 					System.out.println("Frame Received from client - Checking CRC");
 					dataOutputStream.writeUTF("SERVER: Frame Received - Checking CRC");
 					
