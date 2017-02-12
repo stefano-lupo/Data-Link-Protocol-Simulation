@@ -27,9 +27,11 @@ public class Frame implements Serializable{
 		// Read from text file containing data
 		this.sequenceNumber = 1;
 		this.payloadLength = 8;
-		this.data = 31l;
+		this.data = 1234567891234567890L;
 		this.remainder = CRC.performCRC(sequenceNumber, payloadLength, data);
 	}
+	
+
 	
 	public boolean checkCRC() {
 		return CRC.checkCRC(this.getFullBinary());
@@ -43,18 +45,28 @@ public class Frame implements Serializable{
 		return CRC.shortToBinary(payloadLength);
 	}
 	
+	public long getData(){
+		return data;
+	}
+	
 	public String getDataBinary() {
 		return CRC.longToBinary(data);
 	}
 	
 	public String getRemainderBinary() {
-		return CRC.shortToBinary(this.remainder);
+		return CRC.shortToBinary(remainder);
 	}
 	
+	/**
+	 * @return Sequence Number + PayloadLength  + Data in binary
+	 */
 	public String getOriginalBinary() {
 		return getSequenceNumberBinary() + getPayloadLengthBinary() + getDataBinary();
 	}
 	
+	/**
+	 * @return Sequence Number + PayloadLength  + Data + Remainder in binary
+	 */
 	public String getFullBinary() {
 		return getSequenceNumberBinary() + getPayloadLengthBinary() + getDataBinary() + getRemainderBinary();
 	}

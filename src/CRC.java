@@ -1,9 +1,6 @@
 
 
 public class CRC {
-	private final static int HEADER_LENGTH = 32;
-	private final static int DATA_LENGTH = 64;
-	
 	private final static int GENERATOR_LENGTH = 16;
 	private final static int GENERATOR = 47933;				//0xBB3D
 	
@@ -11,17 +8,21 @@ public class CRC {
 			, shortLengthFormatString = "%16s"
 			, longLengthFormatString = "%64s";
 	
+	/** 
+	 * Computes remainder using CRC 16 Generator polynomial
+	 * @param sequenceNumber Sequence number of frame relative to overall data being sent
+	 * @param payloadLength Length of data (bytes)
+	 * @param data Data to be sent in this frame
+	 * @return FCS
+	 */
 	public static Short performCRC(short sequenceNumber, short payloadLength, long data) {
-//	public static String performCRC(long header, long data) {
-//		headerLengthFormatString = "%" + String.valueOf(HEADER_LENGTH) + "s";
-//		generatorLengthFormatString = "%" + String.valueOf(GENERATOR_LENGTH) + "s";
-//		dataLengthFormatString = "%" + String.valueOf(DATA_LENGTH) + "s";
-		
+		// Generate Strings of binary from data
 		String sequenceNumberString = String.format(shortLengthFormatString, Integer.toBinaryString(sequenceNumber)).replace(" ", "0");
 		String payloadLengthString = String.format(shortLengthFormatString, Integer.toBinaryString(payloadLength)).replace(" ", "0");
 		String dataString = String.format(longLengthFormatString, Long.toBinaryString(data)).replace(" ", "0");
 		String full = sequenceNumberString + payloadLengthString + dataString;
 		
+		// Create Generator binary string and substring of generator binary to be used with XOR (ignores 1st digit)
 		String generatorString = String.format(shortLengthFormatString, Integer.toBinaryString(GENERATOR)).replace(" ", "0");
 		String genSubStr = generatorString.substring(1,generatorString.length());
 		
@@ -29,10 +30,10 @@ public class CRC {
 		for(int i =0;i<GENERATOR_LENGTH;i++) {
 			full+=0;
 		}
-		System.out.println("Full str = " + full);
+		
+		// end of moving substring starts at index = generator length
 		int endSubstrIndex = GENERATOR_LENGTH;
 		int endOfFull = full.length();
-		System.out.println("full length = " + endOfFull);
 		String substr = full.substring(0,endSubstrIndex);
 		endSubstrIndex++;
 	
@@ -43,13 +44,23 @@ public class CRC {
 				// XOR with zeros yields itself
 				substr = substr.substring(1,GENERATOR_LENGTH);
 			}
+			// bring down next digit
 			substr += full.charAt(endSubstrIndex);
 			endSubstrIndex++;			
 		}
-		return Short.parseShort(substr, 2);
+		
+		// If generator contains leading 1: Short.parseInt(substr) complains as number becomes to large 
+		// even though it should just be negative
+		// Workaround
+		return (short)Integer.parseInt(substr,2);
 	}
 
-	
+	/**
+	 * Performs bitwise a XOR b on two strings of equal length
+	 * @param a String of bits 1
+	 * @param b String of bits 2
+	 * @return XOR'd bits in string form
+	 */
 	private static String bitwiseXOR(String a, String b) {
 		String returnStr = "";
 		if(a.length() != b.length()) {
@@ -67,13 +78,13 @@ public class CRC {
 	}
 	
 	
+	/**
+	 * 
+	 * @param s
+	 * @return
+	 */
 	public static boolean checkCRC(String s) {
-		System.out.println("Checking CRC on String \t" + s);
-//		String sequenceNumberString = String.format(shortLengthFormatString, Integer.toBinaryString(sequenceNumber)).replace(" ", "0");
-//		String payloadLengthString = String.format(shortLengthFormatString, Integer.toBinaryString(payloadLength)).replace(" ", "0");
-//		String dataString = String.format(longLengthFormatString, Long.toBinaryString(data)).replace(" ", "0");
-//		String full = sequenceNumberString + payloadLengthString + dataString;
-		
+		//System.out.println("Checking CRC on String \t" + s);		
 		String generatorString = String.format(shortLengthFormatString, Integer.toBinaryString(GENERATOR)).replace(" ", "0");
 		String genSubStr = generatorString.substring(1,generatorString.length());
 		
@@ -92,27 +103,31 @@ public class CRC {
 			}
 			substr += s.charAt(endSubstrIndex);
 			endSubstrIndex++;
-//			System.out.println(substr);
 		}
 		
 		if(substr.contains("1")) {
-			System.out.println("Corrupted Data - remainder = " + substr);
+			System.out.println("ERROR: CRC produced remainder = " + substr);
 			return false;
 		} else {
-			System.out.println("Data is good");
+			System.out.println("PASS: CRC found no remainder");
 			return true;
 		}
 	}
 	
-	
+
 	public static String shortToBinary(short s) {
-		return String.format(shortLengthFormatString, Integer.toBinaryString(s)).replace(" ", "0");
+		String string = String.format(shortLengthFormatString, Integer.toBinaryString(s)).replace(" ", "0");
+		if(string.length() > 16){
+			return string.substring(16);
+		}
+		return string;
 	}
 	
 	public static String longToBinary(long d) {
 		return String.format(longLengthFormatString, Long.toBinaryString(d)).replace(" ", "0");
 	}
 	
+
 	
 
 }

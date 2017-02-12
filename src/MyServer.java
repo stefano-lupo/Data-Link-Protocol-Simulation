@@ -29,25 +29,38 @@ public class MyServer extends Thread{
 				System.out.println("Waiting for client on port " + serverSocket.getLocalPort() + "..");
 				Socket server = serverSocket.accept();
 				System.out.println("Just connected to " + server.getRemoteSocketAddress());
+				System.out.println();
 				
 				// Create Data input stream
 				DataInputStream dataInputStream = new DataInputStream(server.getInputStream());
+				DataOutputStream dataOutputStream = new DataOutputStream(server.getOutputStream());
+				
+				// Welcome client to Server
+				dataOutputStream.writeUTF("SERVER: You have succesfully connected");
 				
 				// Create object input stream from this data stream
 				ObjectInputStream objectInputStream = new ObjectInputStream(dataInputStream);
 				
 				// Try accessing the object
 				try {
+					System.out.println("Waiting for frame from client..");
 					frame = (Frame)objectInputStream.readObject();
-					frame.checkCRC();
+					System.out.println("Frame Received from client - Checking CRC");
+					dataOutputStream.writeUTF("SERVER: Frame Received - Checking CRC");
+					
+					if(frame.checkCRC()){
+						dataOutputStream.writeUTF("SERVER: No CRC error found");
+					} else {
+						dataOutputStream.writeUTF("CRC found an error - Retransmit");
+					}
 					
 				} catch (ClassNotFoundException e) {
 					e.printStackTrace();
 				}
 				
-				// Send receipt message back
-				DataOutputStream dataOutputStream = new DataOutputStream(server.getOutputStream());
-				dataOutputStream.writeUTF("Connection finishing");
+				System.out.println("Data Received = " + frame.getData());				
+				System.out.println();
+				System.out.println();
 				server.close();
 
 			} catch (SocketTimeoutException s){
