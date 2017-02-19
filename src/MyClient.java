@@ -16,7 +16,7 @@ import java.util.Random;
 
 public class MyClient {
 	private static int portNum = 8084;
-	private static String serverName = "192.168.1.4";
+	private static String serverName = "localhost";
 	private static int framesSent = 1;
 
 
@@ -30,7 +30,7 @@ public class MyClient {
 		short sequenceNumber = 0;
 		try {
 			in = new FileInputStream("src/data.txt");
-			out = new FileOutputStream("src/output.txt");
+			//out = new FileOutputStream("src/output.txt");
 			int c;
 			while ((c = in.read()) != -1) {
 				bytes[byteCounter] = (byte)c;
@@ -38,26 +38,28 @@ public class MyClient {
 				if(byteCounter == 8){
 					Frame frame = new Frame(sequenceNumber, byteCounter, bytes);
 					sendFrame(frame);
-					out.write(bytes);
+					//out.write(bytes);
 					sequenceNumber++;
 					byteCounter = 0;
 				}
 			}
 		} finally {
+			// If bytes remaining
 			if(byteCounter != 0){
 				System.out.println("Remaining bytes = " + byteCounter);
-				for(int i=0;i<byteCounter;i++){
-					Frame frame = new Frame(sequenceNumber, byteCounter, bytes);
-					sendFrame(frame);
-					out.write(bytes[i]);
+				byte[] remainingBytes = new byte[byteCounter];
+				for(int i=0;i<byteCounter;i++) {
+					remainingBytes[i] = bytes[i];
 				}
+				Frame frame  = new Frame(sequenceNumber, byteCounter, remainingBytes);
+				sendFrame(frame);
 			}
 			if (in != null) {
 				in.close();
 			}
-			if(out!=null){
-				out.close();
-			}
+//			if(out!=null){
+//				out.close();
+//			}
 		}
 
 
@@ -120,9 +122,9 @@ public class MyClient {
 	
 	private static void sendFrame(Frame frame){
 		try{
-			System.out.println("Attempting to connect to " + serverName + " on port " + portNum);
+			//System.out.println("Attempting to connect to " + serverName + " on port " + portNum);
 			Socket client = new Socket(serverName, portNum);
-			System.out.println("Connected to " + client.getRemoteSocketAddress());
+			//System.out.println("Connected to " + client.getRemoteSocketAddress());
 
 			DataInputStream dataInputStream = new DataInputStream(client.getInputStream());
 			DataOutputStream dataOutputStream = new DataOutputStream(client.getOutputStream());

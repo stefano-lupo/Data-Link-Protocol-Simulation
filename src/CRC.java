@@ -33,7 +33,7 @@ public class CRC {
 		String genSubStr = generatorString.substring(1,generatorString.length());
 		
 		// append 'generator length' 0s to data to be checked
-		for(int i =0;i<GENERATOR_LENGTH;i++) {
+		for(int i =0;i<GENERATOR_LENGTH;i++) {		//change to minus 1
 			full+=0;
 		}
 		

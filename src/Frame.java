@@ -49,13 +49,6 @@ public class Frame implements Serializable{
 		return CRC.shortToBinary(payloadLength);
 	}
 	
-	public String getData(){
-		String string = "";
-		for(int i=0;i<data.length;i++){
-			string += (char)data[i];
-		}
-		return string;
-	}
 	
 	public String getDataBinary() {
 		return CRC.byteArrayToBinary(data);
@@ -85,6 +78,29 @@ public class Frame implements Serializable{
 	 */
 	public void setRemainder(short s){
 		this.remainder = s;
+	}
+	
+	
+	
+	
+	
+	/*
+	 * Normal Getter and Setters
+	 */
+	public short getSequenceNumber() {
+		return sequenceNumber;
+	}
+	
+	public short getPayloadLength() {
+		return payloadLength;
+	}
+	
+	public String getData(){
+		String string = "";
+		for(int i=0;i<data.length;i++){
+			string += (char)data[i];
+		}
+		return string;
 	}
 	
 }
