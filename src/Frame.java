@@ -1,9 +1,8 @@
 
 
 import java.io.Serializable;
-import java.io.ObjectInputStream.GetField;
+import java.util.Random;
 
-import javax.annotation.Generated;
 
 public class Frame implements Serializable{
 	
@@ -26,13 +25,11 @@ public class Frame implements Serializable{
 	
 	public Frame(short sequenceNumber, short payloadLength, byte[] data) {
 		// Read from text file containing data
-//		this.sequenceNumber = 1;
-//		this.payloadLength = 8;
-//		this.data = 1234567891234567890L;
 		this.sequenceNumber = sequenceNumber;
 		this.payloadLength = payloadLength;
 		this.data = data;
 		this.remainder = CRC.performCRC(this.sequenceNumber, this.payloadLength, this.data);
+		gremlin();
 	}
 	
 
@@ -101,6 +98,41 @@ public class Frame implements Serializable{
 			string += (char)data[i];
 		}
 		return string;
+	}
+	
+	private void gremlin(){
+		Random r = new Random();
+		int random = r.nextInt(10);
+		// Half of the time corrupt the frame
+		if(random > 5 ){
+			System.out.println("GREMLIN on frame " + sequenceNumber);
+			if(random == 6){
+				// corrupt sequence number
+				System.out.println("Corrupting Sequence Number");
+				sequenceNumber  = (short)r.nextInt(65535);
+			} 
+			else if(random == 7){
+				// corrupt payload length
+				System.out.println("Corrupting Payload length");
+				payloadLength = (short)r.nextInt(65535);
+			}
+			else if(random == 8){
+				System.out.println("Corrupting Data");
+				// always corrupt first byte
+				data[0] = (byte)r.nextInt(256);
+				
+				// randomly corrupt rest of bytes
+				for(int i=1;i<data.length;i++){
+					if(r.nextInt(2) == 1){
+						data[i] = (byte)r.nextInt(256);
+					}
+				}
+			}
+			else if(random == 9){
+				System.out.println("Corrupting Remainder");
+				remainder = (short)r.nextInt(65535);
+			}
+		}
 	}
 	
 }

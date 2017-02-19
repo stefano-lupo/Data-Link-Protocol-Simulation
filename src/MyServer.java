@@ -1,8 +1,6 @@
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
-import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.ObjectInput;
 import java.io.ObjectInputStream;
 import java.io.PrintWriter;
 import java.net.ServerSocket;
@@ -55,7 +53,6 @@ public class MyServer extends Thread{
 					System.out.println("Frame Received from client - Checking CRC");
 					dataOutputStream.writeUTF("SERVER: Frame Received - Checking CRC");
 		
-					
 					if(frame.checkCRC()){
 						successfulFrames.add(frame);
 						nextFrameIndex++;
@@ -83,6 +80,8 @@ public class MyServer extends Thread{
 		}
 		System.out.println();
 		System.out.println("Finished Receiving");
+		
+		// Write to file
 		PrintWriter out;
 		try {
 			out = new PrintWriter("src/output.txt");
@@ -103,6 +102,8 @@ public class MyServer extends Thread{
 	private static void sendACK() {
 		System.out.println("ACK sent");
 	}
+	
+	
 	public static void main(String[] args) {
 		try {
 			Thread t = new MyServer(8083);
