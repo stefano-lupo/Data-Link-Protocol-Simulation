@@ -29,7 +29,9 @@ public class Frame implements Serializable{
 		this.payloadLength = payloadLength;
 		this.data = data;
 		this.remainder = CRC.performCRC(this.sequenceNumber, this.payloadLength, this.data);
-		gremlin();
+		if(payloadLength > 1) {
+			gremlin();
+		}
 	}
 	
 
