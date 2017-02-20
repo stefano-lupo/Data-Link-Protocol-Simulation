@@ -23,8 +23,8 @@ public class MyServer extends Thread{
 		MyServer myServer = new MyServer(8083);
 		myServer.start();
 		myServer.listen();
-
-
+		
+		
 		// Once finished listening: Tidy up
 		try{
 			System.out.println("Closing Down");
@@ -42,7 +42,6 @@ public class MyServer extends Thread{
 	ServerSocket serverSocket;
 	Socket server;
 	private static int portNum = 8084;
-	private static final int WINDOW_SIZE = 2;
 
 	private ArrayList<Frame> successfulFrames;
 	private ArrayList<Frame> bufferFrames; 
@@ -138,16 +137,16 @@ public class MyServer extends Thread{
 						System.out.println("Interupted");
 					}
 				}
-
+				
 			}
-
+		
 		} catch (IOException e) {
 			System.out.println("Exception before loop");
 			e.printStackTrace();
 		}
 	}
 
-
+	
 	// Thread for talking to client
 	@Override
 	public void run() {
@@ -155,31 +154,18 @@ public class MyServer extends Thread{
 		try{
 			DataOutputStream dataOutputStream = new DataOutputStream(server.getOutputStream());
 			ObjectOutputStream objectOutputStream = new ObjectOutputStream(dataOutputStream);
-
-
-			while(true){
-				if((bufferFrames.size() % WINDOW_SIZE)== 0 && bufferFrames.size() >0){
-					// Send ACK
-					byte[] data = {'a'};
-					Frame frame = new Frame((short)bufferFrames.get(bufferFrames.size()-1).getSequenceNumber(), (short)1, data);
-					System.out.println("sending frame :" + frame.getData());
-					objectOutputStream.writeObject(frame);
-					// Add buffer frames to success frames and reset buffer
-					for(Frame f : bufferFrames){
-						successfulFrames.add(f);
-						//bufferFrames.remove(f);
-					}
-					
-					bufferFrames.clear();
-				}
+			for(int i=0;i<10;i++){
+				byte[] data = {(byte)(63+i)};
+				Frame frame = new Frame((short)1, (short)1, data);
+				System.out.println("sending frame :" + frame.getData());
+				objectOutputStream.writeObject(frame);
 				try{
-					sleep(100);
+					sleep(500);
 				} catch (InterruptedException e) {
 					System.out.println("interupt in dummy sleep");
 				}
 			}
 
-		// Catch Opening Streams Exceptions
 		} catch (IOException e) {
 			System.out.println("IOException talking to client");
 		}
@@ -245,7 +231,7 @@ public class MyServer extends Thread{
 		System.out.println("Finished Receiving");
 
 		// Write to file
-		PrintWriter out;
+		/*		PrintWriter out;
 		try {
 			out = new PrintWriter("src/output.txt");
 			String s = "";
@@ -259,7 +245,7 @@ public class MyServer extends Thread{
 			out.close();
 		} catch(IOException e) {
 			System.out.println(e);
-		}
+		}*/
 	}
 
 
