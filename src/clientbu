@@ -15,7 +15,7 @@ import java.util.ArrayList;
 
 
 
-public class MyClient extends Thread {
+public class MyClient {
 	private static int portNum = 8084;
 	private static String serverName = "localhost";
 
@@ -31,23 +31,41 @@ public class MyClient extends Thread {
 	private static ObjectInputStream objectInputStream;
 	private static ObjectOutputStream objectOutputStream;
 
-	private boolean transmitting = false;
 
 
 	public static void main(String[] args){
 		frames = new ArrayList<>();
-		
-		
-		MyClient myClient = new MyClient();
+		Sender sender = null;
+		//Receiver receiver = null;
 		try {
 			client = new Socket(serverName, portNum);
 			client.setSoTimeout(5000);
 
+			sender = new Sender();
+			//			receiver = new Receiver();
+			//			receiver.start();
 			running = true;
-			myClient.start();
-			myClient.listen();
+			sender.start();
+
+			while(sender.isAlive()){
+				
+			}
 			
-			
+			System.out.println("Sender dead..");
+			/* To sender
+			//dataInputStream = new DataInputStream(client.getInputStream());
+			dataOutputStream = new DataOutputStream(client.getOutputStream());
+
+			//objectInputStream = new ObjectInputStream(dataInputStream);
+			objectOutputStream = new ObjectOutputStream(dataOutputStream);
+
+			for(int i=0;i<10;i++){
+				byte[] data = {(byte)(i+63)};
+				System.out.println("sending frame");
+				objectOutputStream.writeObject(new Frame((short)1, (short)1, data));
+			}
+			client.close();
+			 */
 
 		} catch (SocketException e) {
 			System.out.println("Scoket exception");
@@ -68,96 +86,36 @@ public class MyClient extends Thread {
 	}
 
 	
-	// Listen for data from server
-	public void listen(){
-		int sleeps = 0;
-		try{
-			DataInputStream dataInputStream = new DataInputStream(client.getInputStream());
-			ObjectInputStream objectInputStream = new ObjectInputStream(dataInputStream);
-			while(running){
-				try{
-					Frame frame =(Frame)objectInputStream.readObject();
-					System.out.println("Frame received : " + frame.getData());
-					sleeps = 0;
-				} catch (ClassNotFoundException e) {
-					System.out.println("Class not found in listening");
-				} catch (EOFException eofe){
-					try{
-						System.out.println("Sleepin");
-						sleep(1000);
-						sleeps++;
-						if(sleeps >= 5){
-							break;
-						}
-					} catch (InterruptedException e) {
-						System.out.println("Interupted");
-					}
-				}
-				
-			}
-			if(!transmitting){
-				return;
-			} else {
-				listen();
-			}
-			
-		} catch (SocketTimeoutException e) {
-			if(!transmitting){
-				return;
-			} else {
-				listen();
-			}
-		}
-		
-		catch (IOException e) {
-			System.out.println("Exception before loop");
-			e.printStackTrace();
-		}
-	}
 	
-	
-	// Send data to server
-	@Override
-	public void run(){
-		transmitting = true;
-		try{
-			//dataInputStream = new DataInputStream(client.getInputStream());
-			dataOutputStream = new DataOutputStream(client.getOutputStream());
 
-			//objectInputStream = new ObjectInputStream(dataInputStream);
-			objectOutputStream = new ObjectOutputStream(dataOutputStream);
-
-			for(int i=0;i<10;i++){
-				byte[] data = {(byte)(i+63)};
-				System.out.println("sending frame");
-				objectOutputStream.writeObject(new Frame((short)1, (short)1, data));
-				try{
-					sleep(1000);
-				} catch (InterruptedException e) {
-					System.out.println("interupted in dummy sleep");
-				}
-			}
-			
-			// finished transmitting data
-			try{
-				transmitting = false;
-				join();
-			} catch (InterruptedException e) {
-				System.out.println("Exceiption in waiting for client sender thread to die");
-			}
-			//client.close();
-		} catch (IOException e) {
-			System.out.println("IOException");
-		}
-	}
-	
-	
-	/*
 	static class Sender extends Thread{
 
-		
-
 		@Override
+		public void run(){
+			try{
+				//dataInputStream = new DataInputStream(client.getInputStream());
+				dataOutputStream = new DataOutputStream(client.getOutputStream());
+
+				//objectInputStream = new ObjectInputStream(dataInputStream);
+				objectOutputStream = new ObjectOutputStream(dataOutputStream);
+
+				for(int i=0;i<10;i++){
+					byte[] data = {(byte)(i+63)};
+					System.out.println("sending frame");
+					objectOutputStream.writeObject(new Frame((short)1, (short)1, data));
+				}
+				try{
+					join();
+				} catch (InterruptedException e) {
+					System.out.println("Exceiption in waiting for client sender thread to die");
+				}
+				//client.close();
+			} catch (IOException e) {
+				System.out.println("IOException");
+			}
+		}
+
+		/*@Override
 		public void run() {
 			System.out.println("Sender run");
 			int c = 0;
@@ -227,8 +185,8 @@ public class MyClient extends Thread {
 			} catch (Exception exception){
 				System.out.println("Sending data failed - " + exception);
 			}
-		}
-	}*/
+		}*/
+	}
 
 	/*
 	static class Receiver extends Thread{
