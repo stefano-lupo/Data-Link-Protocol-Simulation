@@ -23,7 +23,7 @@ public class MyClient extends Thread {
 	private static final int WINDOW_SIZE = 2;
 	private static final int TRANSMITER_SLEEP_TIME = 500;		// Thread Sleep time before checking buffer
 	private static final int LISTENER_TIMEOUT_TIME = 5000;		// How long to wait for frame on input stream before shutting down
-	
+
 	private static boolean running = false;
 
 	private static Socket client;
@@ -34,7 +34,9 @@ public class MyClient extends Thread {
 	private static ObjectInputStream objectInputStream;
 	private static ObjectOutputStream objectOutputStream;
 
-	private boolean transmitting = false;
+	private volatile boolean transmitting = false;
+	private volatile boolean nackReceived = false;
+	private int nackIndex;
 
 
 	public static void main(String[] args){
@@ -76,14 +78,19 @@ public class MyClient extends Thread {
 			ObjectInputStream objectInputStream = new ObjectInputStream(dataInputStream);
 			while(running){
 				try{
-	
+
 					Frame frame =(Frame)objectInputStream.readObject();
-					
+
 					if(frame.getData().equals("a")){
 						System.out.println("ACK received : " + frame.getSequenceNumber());
+						//wake writer thread with interupt exception or notify?
 						frames.clear();
+						nackReceived = false;
 					} else if(frame.getData().equals("n")){
 						System.out.println("NACK received for " + frame.getSequenceNumber());
+						nackReceived = true;
+						nackIndex = frame.getSequenceNumber();
+						
 					}
 					sleeps = 0;
 				} catch (ClassNotFoundException e) {
@@ -128,6 +135,7 @@ public class MyClient extends Thread {
 
 
 
+	// Transmission Thread
 	@Override
 	public void run(){
 		transmitting = true;
@@ -148,8 +156,28 @@ public class MyClient extends Thread {
 
 
 			while(c != -1) {
+
 				// Check if we can send next frame
-				if(frames.size() < WINDOW_SIZE) {
+				if(nackReceived){
+					Frame frame = null;
+					boolean frameFound = false;
+					for(Frame f : frames){
+						if(f.getSequenceNumber() == nackIndex){
+							frame = f;
+							frameFound = true;
+							break;
+						}
+					}
+
+					if(!frameFound){
+						System.out.println("NACK'd Frame not found in Clients buffer - UhOh");
+					} else{
+						objectOutputStream.writeObject(frame);
+						System.out.println("ReSent Frame " + frame.getSequenceNumber() + " to server");
+						System.out.println();
+						nackReceived = false;
+					}
+				}else if(frames.size() < WINDOW_SIZE) {
 					byte[] bytes = new byte[8];
 					short byteCounter = 0;
 					for(int i=0;i<8;i++) {
@@ -166,19 +194,22 @@ public class MyClient extends Thread {
 					}
 					Frame frame = new Frame(sequenceNumber, byteCounter, bytes);
 					objectOutputStream.writeObject(frame);
+					System.out.println("Sent Frame " + frame.getSequenceNumber() + " to server");
+					System.out.println();
 					frames.add(frame);
 					sequenceNumber++;
 				} else {
 					try {
-						System.out.println("Sleeping for 500ms");
+						System.out.println("Frame Full (" + frames.size() + ") Sleeping for 500ms");
 						sleep(500);
 					} catch (InterruptedException e) {
 						System.out.println("Thread awoken early : " + e);
 					}
 				}
+
 			}
-			
-			
+
+
 			// One finished reading frames: tidy up
 			try {
 				in.close();

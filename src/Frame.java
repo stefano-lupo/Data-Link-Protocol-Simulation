@@ -105,7 +105,13 @@ public class Frame implements Serializable{
 	private void gremlin(){
 		Random r = new Random();
 		int random = r.nextInt(10);
-		random = 1;	// bypass 
+		//random = 1;	// bypass 
+		if(getSequenceNumber() == 5){
+			random = 8;
+		} else {
+			random = 1;
+		}
+		
 		// Half of the time corrupt the frame
 		if(random > 5 ){
 			System.out.println("GREMLIN on frame " + sequenceNumber);
