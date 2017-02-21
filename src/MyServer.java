@@ -103,7 +103,52 @@ public class MyServer extends Thread{
 					} catch (ClassNotFoundException e) {
 						System.out.println("Class not found while unpacking frame");
 					} 
-				} 
+				} else{
+					// Currently checking nack (retransmission mode)
+					server.setSoTimeout(LISTENER_TIMEOUT_TIME);
+					ArrayList<Frame> inputStreamClog = new ArrayList<>();
+					while(true){
+						try{
+							Frame frame =(Frame)objectInputStream.readObject();
+							if(frame.getSequenceNumber() == nackIndex){
+								//TODO: handle CRC on retransmitted correct index frame
+								// got to our retransmitted frame
+								System.out.println("Got frame " + frame.getSequenceNumber());
+								bufferFrames.add(frame);
+								break;
+							} else {
+								inputStreamClog.add(frame);
+							}
+							
+							
+							
+//							System.out.println("LISTENER: Received frame " + frame.getSequenceNumber() + ": " + frame.getData());
+//							System.out.println("LISTENER: Checking CRC");
+//							System.out.print("LISTENER: ");
+//							if(frame.checkCRC()){
+//								bufferFrames.add(frame);
+//								nack = false;
+//								nextFrameIndex ++;
+//							} else {
+//								System.out.println("LISTENER to TRANSMITTER: Need a retransmit for frame " + nextFrameIndex);
+//								nack = true;
+//								nackIndex = nextFrameIndex;
+//								checkingNack = true;		// this is set by other thread otherwise this thread would straight away read the next input
+//							}
+						} catch (ClassNotFoundException classNotFoundException){
+							System.out.println("Clas not found");
+						}
+					}
+					
+					nack = false; // restart transmit
+					
+					for(Frame f : inputStreamClog){
+						bufferFrames.add(f);
+						System.out.println(f.getSequenceNumber() + " was in clog");
+					}
+			
+					checkingNack = false;
+				}
 			}
 		}catch (SocketTimeoutException sto){
 			// No data on input stream within timeout period: Shut Down
