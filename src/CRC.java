@@ -112,10 +112,10 @@ public class CRC {
 		}
 		
 		if(substr.contains("1")) {
-			System.out.println("ERROR: CRC produced remainder = " + substr);
+			System.out.println("ERROR - CRC produced remainder = " + substr);
 			return false;
 		} else {
-			System.out.println("PASS: CRC found no remainder");
+			System.out.println("PASS - CRC found no remainder");
 			return true;
 		}
 	}

@@ -1,7 +1,5 @@
-import java.io.BufferedInputStream;
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
-import java.io.EOFException;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -12,51 +10,44 @@ import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 
-import javax.xml.crypto.Data;
-
 public class MyServer extends Thread{
-
-
 
 
 	public static void main(String[] args) {
 		MyServer myServer = new MyServer(8083);
-		myServer.start();
-		myServer.listen();
+		
+		myServer.start();										// Transmitter thread
+		myServer.listen();										// Listening Thread
 
 
 		// Once finished listening: Tidy up
 		try{
-			System.out.println("Closing Down");
+			System.out.println("Terminating Connection");
 			myServer.server.close();
 			myServer.serverSocket.close();
 		} catch (Exception e) {
 			System.out.println("Exception closing sockets");
 		}
+	
+		// Write result to file
+		myServer.writeToFile();
+		
 	}
-
-
-
 
 
 	ServerSocket serverSocket;
 	Socket server;
 	private static int portNum = 8084;
 	private static final int WINDOW_SIZE = 2;
+	private static final int TRANSMITER_SLEEP_TIME = 500;		// Thread Sleep time before checking buffer
+	private static final int LISTENER_TIMEOUT_TIME = 5000;		// How long to wait for frame on input stream before shutting down
 
 	private ArrayList<Frame> successfulFrames;
 	private ArrayList<Frame> bufferFrames; 
 	int nextFrameIndex;
-	private Frame frame;
 	private boolean running = false;
-
-	//	private DataInputStream dataInputStream;
-	//	private DataOutputStream dataOutputStream;
-	//	private ObjectInputStream objectInputStream;
-	//	private ObjectOutputStream objectOutputStream;
-
-
-
+	private boolean nack = false;
+	private int nackIndex;
 
 
 	public MyServer(int port) {
@@ -71,111 +62,86 @@ public class MyServer extends Thread{
 			server = serverSocket.accept();
 			System.out.println("Just connected to " + server.getRemoteSocketAddress());
 			System.out.println();
-
-			// Create Data I/O streams
-			//			dataInputStream = new DataInputStream(server.getInputStream());
-			//			dataOutputStream = new DataOutputStream(server.getOutputStream());
-			//			System.out.println(dataInputStream.readInt());
-			//			objectInputStream = new ObjectInputStream(dataInputStream);
-
-
-
-			//			try{
-			//				Frame frame = (Frame)objectInputStream.readObject();
-			//				System.out.println(frame.getData());
-			//			} catch (ClassNotFoundException classNotFoundException){
-			//				System.out.println("classnotfoujs");
-			//			}
-
-			//server.close();
-			//dataOutputStream = new DataOutputStream(server.getOutputStream());
-
-			// Create Object I/O Streams
-			//objectInputStream = new ObjectInputStream(dataInputStream);
-			//objectInputStream.readObject();
-			//objectOutputStream = new ObjectOutputStream(dataOutputStream);
-
-
-
 			running = true;
 		} catch (SocketException se) {
-			se.printStackTrace();
+			System.out.println("Socket Exception when connecting to client");
 		}
 		catch (SocketTimeoutException ste) {
-			System.out.println("Timedout");
-			running = false;
+			System.out.println("Timeout occured while connecting to client");
 		} catch (IOException io) {
-			//io.printStackTrace();
+			System.out.println("IO exception when connecting to client");
 		}
 	}
 
 
+	// Listens for frames from client
 	public void listen(){
-		int sleeps = 0;
 		try{
 			DataInputStream dataInputStream = new DataInputStream(server.getInputStream());
 			ObjectInputStream objectInputStream = new ObjectInputStream(dataInputStream);
 			while(running){
 				try{
+					server.setSoTimeout(LISTENER_TIMEOUT_TIME);
 					Frame frame =(Frame)objectInputStream.readObject();
-					System.out.println("Received frame " + frame.getSequenceNumber() + ": " + frame.getData());
-					System.out.println("Checking CRC");
+					System.out.println("LISTENER: Received frame " + frame.getSequenceNumber() + ": " + frame.getData());
+					System.out.println("LISTENER: Checking CRC");
+					System.out.print("LISTENER: ");
 					if(frame.checkCRC()){
 						bufferFrames.add(frame);
+						nack = false;
+					} else {
+						nack = true;
+						nackIndex = frame.getSequenceNumber();
 					}
-					sleeps = 0;
+					System.out.println();
 				} catch (ClassNotFoundException e) {
-					System.out.println("Class not found in listening");
-				} catch (EOFException eofe){
-					try{
-						System.out.println("Sleepin");
-						sleep(1000);
-						sleeps++;
-						if(sleeps >= 5){
-							break;
-						}
-					} catch (InterruptedException e) {
-						System.out.println("Interupted");
-					}
-				}
-
+					System.out.println("Class not found while unpacking frame");
+				} 
 			}
-
-		} catch (IOException e) {
-			System.out.println("Exception before loop");
+		}catch (SocketTimeoutException sto){
+			// No data on input stream within timeout period: Shut Down
+			System.out.println("Socket Timed after " + LISTENER_TIMEOUT_TIME/1000 + "s");
+			running = false;
+			return;
+		}catch (IOException e) {
+			System.out.println("Error Creating Input Streams on listener thread");
 			e.printStackTrace();
 		}
 	}
 
+	
 
-	// Thread for talking to client
+	// Thread for transmitting frames to client
 	@Override
 	public void run() {
-		System.out.println("Second thread running");
 		try{
 			DataOutputStream dataOutputStream = new DataOutputStream(server.getOutputStream());
 			ObjectOutputStream objectOutputStream = new ObjectOutputStream(dataOutputStream);
 
-
-			while(true){
-				if((bufferFrames.size() % WINDOW_SIZE)== 0 && bufferFrames.size() >0){
+			while(running){
+				if(nack){
+					byte[] data = {'n'};
+					Frame frame = new Frame((short)nackIndex, (short)1, data);
+					System.out.println("TRANSMITTER: Sending NACK for frame " + nackIndex);
+					objectOutputStream.writeObject(frame);
+				} else if((bufferFrames.size() % WINDOW_SIZE)== 0 && bufferFrames.size() >0){
 					// Send ACK
 					byte[] data = {'a'};
-					Frame frame = new Frame((short)bufferFrames.get(bufferFrames.size()-1).getSequenceNumber(), (short)1, data);
-					System.out.println("sending frame :" + frame.getData());
+					short lastSequenceNumber = (short)bufferFrames.get(bufferFrames.size()-1).getSequenceNumber();
+					Frame frame = new Frame(lastSequenceNumber, (short)1, data);
+					System.out.println("TRANSMITTER: Sending ACK for frames up to frame " + lastSequenceNumber);
 					objectOutputStream.writeObject(frame);
+					
 					// Add buffer frames to success frames and reset buffer
 					for(Frame f : bufferFrames){
 						successfulFrames.add(f);
-						//bufferFrames.remove(f);
 					}
-					
 					bufferFrames.clear();
 				}
 				try{
-					sleep(100);
+					sleep(TRANSMITER_SLEEP_TIME);
 				} catch (InterruptedException e) {
-					System.out.println("interupt in dummy sleep");
+					System.out.println("Transmitter thread interupted while sleeping");
 				}
 			}
 
@@ -184,72 +150,17 @@ public class MyServer extends Thread{
 			System.out.println("IOException talking to client");
 		}
 
-		/*		try{
-			DataOutputStream dataOutputStream = new DataOutputStream(server.getOutputStream());
-			ObjectOutputStream objectOutputStream = new ObjectOutputStream(dataOutputStream);
-			for(int i=0;i<3;i++){
-				objectOutputStream.writeObject(new Integer(99));
-				try{
-					sleep(2000);
-				} catch (InterruptedException e){
-					System.out.println("Server sleep interupted");
-				}
-			}
-		server.close();
-		serverSocket.close();
-		} catch (IOException e) {
-			System.out.println("Io exception on server");
-		}*/
+	}
 
 
-
-
-		//		while(running) {
-		//			System.out.println("Starting");
-		//			// Welcome client to Server
-		//			//dataOutputStream.writeUTF("SERVER: You have succesfully connected");
-		//			//
-		//			//				// Create object input stream from this data stream
-		//			//				ObjectInputStream objectInputStream = new ObjectInputStream(dataInputStream);
-		//
-		//			// Try accessing the object
-		//			try {
-		//				DataInputStream dis = new DataInputStream(server.getInputStream());
-		//				ObjectInputStream ois = new ObjectInputStream(dis);
-		//				frame = (Frame)ois.readObject();
-		//				System.out.println("Frame Received from client - Checking CRC");
-		//				byte[] ack = new byte[1];
-		//				if(frame.checkCRC()){
-		//					successfulFrames.add(frame);
-		//					nextFrameIndex++;
-		//					ack[0] = 'a';
-		//				} else {
-		//					successfulFrames.add(frame);
-		//					ack[0] = 'n';
-		//				}
-		//
-		//				// Return the ack
-		//				Frame returnFrame = new Frame(frame.getSequenceNumber(),(short)1, ack);
-		//				DataOutputStream dos = new DataOutputStream(server.getOutputStream());
-		//				ObjectOutputStream oos = new ObjectOutputStream(dos);
-		//				oos.writeObject(returnFrame);
-		//
-		//			} catch (ClassNotFoundException e) {
-		//				e.printStackTrace();
-		//			} catch (IOException io) {
-		//				System.out.println("IO exception");
-		//				io.printStackTrace();
-		//			}
-		//		}
-
-		System.out.println("Finished Receiving");
-
+	private void writeToFile(){
+		System.out.println("\nData Received");
 		// Write to file
 		PrintWriter out;
 		try {
 			out = new PrintWriter("src/output.txt");
 			String s = "";
-			System.out.println("Frame length = " + successfulFrames.size());
+			System.out.println("Received " + successfulFrames.size() + " frames from client");
 			for(Frame frame : successfulFrames) {
 				System.out.println("Frame " + frame.getSequenceNumber() + ": " + frame.getData());
 				s += frame.getData();
@@ -261,8 +172,6 @@ public class MyServer extends Thread{
 			System.out.println(e);
 		}
 	}
-
-
 
 
 }
