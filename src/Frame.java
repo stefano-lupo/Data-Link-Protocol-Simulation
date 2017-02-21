@@ -29,14 +29,16 @@ public class Frame implements Serializable{
 		this.payloadLength = payloadLength;
 		this.data = data;
 		this.remainder = CRC.performCRC(this.sequenceNumber, this.payloadLength, this.data);
-		if(payloadLength > 1) {
-			gremlin();
-		}
+//		if(payloadLength > 1) {
+//			gremlin();
+//		}
 	}
 	
 
 	
 	public boolean checkCRC() {
+		// Hopefully only corrupt packets on server side?
+		gremlin();
 		return CRC.checkCRC(this.getFullBinary());
 	}
 	
@@ -102,43 +104,58 @@ public class Frame implements Serializable{
 		return string;
 	}
 	
+	public byte[] getDataBytes(){
+		return data;
+	}
+	
+	
+	// TEMP
+	public void setData(){
+		for(int i=0;i<data.length;i++){
+			data[i] = 'x';
+		}
+	}
+	
+	
+	
+	
 	private void gremlin(){
 		Random r = new Random();
 		int random = r.nextInt(10);
 		//random = 1;	// bypass 
-		if(getSequenceNumber() == 5){
-			random = 8;
-		} else {
-			random = 1;
-		}
+//		if(getSequenceNumber() == 5){
+//			random = 8;
+//		} else {
+//			random = 1;
+//		}
 		
 		// Half of the time corrupt the frame
-		if(random > 5 ){
-			System.out.println("GREMLIN on frame " + sequenceNumber);
-			if(random == 6){
+		if(random > 5){
+			if(random == 7){
+				// corrupt payload length
+				System.out.println("GREMLIN : Corrupting Payload length on frame " + sequenceNumber);
+				payloadLength = (short)r.nextInt(65535);
+			} 
+			else if(random == 6){
 				// corrupt sequence number
-				System.out.println("Corrupting Sequence Number");
+				System.out.println("GREMLIN : Corrupting Sequence Number on frame " + sequenceNumber);
 				sequenceNumber  = (short)r.nextInt(65535);
 			} 
-			else if(random == 7){
-				// corrupt payload length
-				System.out.println("Corrupting Payload length");
-				payloadLength = (short)r.nextInt(65535);
-			}
+
 			else if(random == 8){
-				System.out.println("Corrupting Data");
+				System.out.println("GREMLIN : Corrupting Data on frame " + sequenceNumber);
 				// always corrupt first byte
-				data[0] = (byte)r.nextInt(256);
+				data[0] = '*';
 				
 				// randomly corrupt rest of bytes
-				for(int i=1;i<data.length;i++){
-					if(r.nextInt(2) == 1){
-						data[i] = (byte)r.nextInt(256);
-					}
-				}
+//				for(int i=1;i<data.length;i++){
+//					if(r.nextInt(2) == 1){
+//						data[i] = (byte)r.nextInt(256);
+//					}
+//				}
 			}
 			else if(random == 9){
-				System.out.println("Corrupting Remainder");
+				System.out.println("GREMLIN : Corrupting Remainder on frame " + sequenceNumber);
 				remainder = (short)r.nextInt(65535);
 			}
 		}

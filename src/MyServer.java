@@ -10,7 +10,6 @@ import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 
-import javax.print.attribute.standard.Media;
 
 public class MyServer extends Thread{
 
@@ -42,10 +41,11 @@ public class MyServer extends Thread{
 	private static int portNum = 8084;
 	private static final int WINDOW_SIZE = 2;
 	private static final int TRANSMITER_SLEEP_TIME = 100;		// Thread Sleep time before checking buffer
-	private static final int LISTENER_TIMEOUT_TIME = 5000;		// How long to wait for frame on input stream before shutting down
+	private static final int RECEIVER_TIMEOUT_TIME = 5000;		// How long to wait for frame on input stream before shutting down
 
 	private ArrayList<Frame> successfulFrames;
 	private ArrayList<Frame> bufferFrames; 
+	private ArrayList<Frame> inputStreamClog;
 	int nextFrameIndex;
 	private volatile boolean running = false;
 	private volatile boolean nack = false, checkingNack = false;
@@ -55,6 +55,7 @@ public class MyServer extends Thread{
 	public MyServer(int port) {
 		successfulFrames = new ArrayList<>();
 		bufferFrames = new ArrayList<>();
+		inputStreamClog = new ArrayList<>();
 		nextFrameIndex = 1;
 		System.out.println("-------------------------Server--------------------------------");
 		try {
@@ -83,76 +84,77 @@ public class MyServer extends Thread{
 			ObjectInputStream objectInputStream = new ObjectInputStream(dataInputStream);
 			while(running){
 				if(!checkingNack) {
-					try{
-						server.setSoTimeout(LISTENER_TIMEOUT_TIME);
-						Frame frame =(Frame)objectInputStream.readObject();
-						System.out.println("LISTENER: Received frame " + frame.getSequenceNumber() + ": " + frame.getData());
-						System.out.println("LISTENER: Checking CRC");
-						System.out.print("LISTENER: ");
+					if(inputStreamClog.isEmpty()){
+						try{
+							server.setSoTimeout(RECEIVER_TIMEOUT_TIME);
+							Frame frame =(Frame)objectInputStream.readObject();
+							System.out.println("RECEIVER: Received frame " + nextFrameIndex);
+							System.out.println("RECEIVER: Checking CRC");
+							System.out.print("RECEIVER: ");
+							if(frame.checkCRC()){
+								bufferFrames.add(frame);
+								nack = false;
+								nextFrameIndex ++;
+							} else {
+								System.out.println("RECEIVER to TRANSMITTER: Need a retransmit for frame " + nextFrameIndex);
+								nack = true;
+								nackIndex = nextFrameIndex;
+								checkingNack = true;		// this is set by other thread otherwise this thread would straight away read the next input
+							}
+							System.out.println();
+						} catch (ClassNotFoundException e) {
+							System.out.println("Class not found while unpacking frame");
+						} 
+					} else {
+						Frame frame = inputStreamClog.get(0);
+						System.out.println("RECEIVER: Taking clogged frame :" + nextFrameIndex);
+						System.out.println("RECEIVER: Checking CRC");
+						System.out.print("RECEIVER: ");
 						if(frame.checkCRC()){
 							bufferFrames.add(frame);
 							nack = false;
 							nextFrameIndex ++;
+							inputStreamClog.remove(0);
 						} else {
-							System.out.println("LISTENER to TRANSMITTER: Need a retransmit for frame " + nextFrameIndex);
+							System.out.println("RECEIVER to TRANSMITTER: Need a retransmit for frame " + nextFrameIndex);
 							nack = true;
 							nackIndex = nextFrameIndex;
 							checkingNack = true;		// this is set by other thread otherwise this thread would straight away read the next input
 						}
-						System.out.println();
-					} catch (ClassNotFoundException e) {
-						System.out.println("Class not found while unpacking frame");
-					} 
+					}
 				} else{
 					// Currently checking nack (retransmission mode)
-					server.setSoTimeout(LISTENER_TIMEOUT_TIME);
-					ArrayList<Frame> inputStreamClog = new ArrayList<>();
+					server.setSoTimeout(RECEIVER_TIMEOUT_TIME);
+					// The retransmistted frame will most likely be behind some other frames in the input stream
+					// If we flushed the input stream, we would use go back n
+					// We need to extract our retransmitted frame, verify it, add it to buffer and then sort through clogged frames
+
 					while(true){
 						try{
 							Frame frame =(Frame)objectInputStream.readObject();
 							if(frame.getSequenceNumber() == nackIndex){
 								//TODO: handle CRC on retransmitted correct index frame
 								// got to our retransmitted frame
-								System.out.println("Got frame " + frame.getSequenceNumber());
+								System.out.println("Got frame " + frame.getSequenceNumber() + " - Note no crc checking here : " +frame.getData());
 								bufferFrames.add(frame);
+								nextFrameIndex++;
 								break;
 							} else {
 								inputStreamClog.add(frame);
 							}
-							
-							
-							
-//							System.out.println("LISTENER: Received frame " + frame.getSequenceNumber() + ": " + frame.getData());
-//							System.out.println("LISTENER: Checking CRC");
-//							System.out.print("LISTENER: ");
-//							if(frame.checkCRC()){
-//								bufferFrames.add(frame);
-//								nack = false;
-//								nextFrameIndex ++;
-//							} else {
-//								System.out.println("LISTENER to TRANSMITTER: Need a retransmit for frame " + nextFrameIndex);
-//								nack = true;
-//								nackIndex = nextFrameIndex;
-//								checkingNack = true;		// this is set by other thread otherwise this thread would straight away read the next input
-//							}
+
 						} catch (ClassNotFoundException classNotFoundException){
 							System.out.println("Clas not found");
 						}
 					}
-					
-					nack = false; // restart transmit
-					
-					for(Frame f : inputStreamClog){
-						bufferFrames.add(f);
-						System.out.println(f.getSequenceNumber() + " was in clog");
-					}
-			
+
+					nack = false; // restart transmitting (ie looking at buffer frames)
 					checkingNack = false;
 				}
 			}
 		}catch (SocketTimeoutException sto){
 			// No data on input stream within timeout period: Shut Down
-			System.out.println("Listener Socket Timed after " + LISTENER_TIMEOUT_TIME/1000 + "s");
+			System.out.println("Listener Socket Timed after " + RECEIVER_TIMEOUT_TIME/1000 + "s");
 			if(checkingNack){
 				System.out.println("Timeout occured waiting for retransmission of " + nackIndex);
 			}
