@@ -20,8 +20,8 @@ public class MyClient extends Thread {
 	private static String serverName = "localhost";
 	private static Socket client;
 
-	private static final int WINDOW_SIZE = 2;
-	private static final int TRANSMITER_SLEEP_TIME = 500;		// Thread Sleep time before checking buffer
+	private static final int WINDOW_SIZE = 8;
+	private static final int TRANSMITER_SLEEP_TIME = 10;		// Thread Sleep time before checking buffer
 	private static final int RECEIVER_TIMEOUT_TIME = 5000;		// How long to wait for frame on input stream before shutting down
 
 	private static volatile boolean running = false;
@@ -46,8 +46,6 @@ public class MyClient extends Thread {
 
 			// Finished Listening - close connection
 			running = false;
-			client.close();
-
 
 		} catch (SocketException e) {
 			System.out.println("Scoket exception");
@@ -89,7 +87,7 @@ public class MyClient extends Thread {
 				} catch (ClassNotFoundException e) {
 					System.out.println("Class not found in listening");
 				} catch (EOFException eofe){
-					System.out.println("eofe");
+					System.out.println("Finished Listening");
 					return;
 				}
 
@@ -145,17 +143,19 @@ public class MyClient extends Thread {
 						System.out.println("NACK'd Frame not found in Clients buffer - BAD NEWS: " + nackIndex);
 					} else{
 
-						//						NOTE: 	ObjectOutputStream maintains a cache of sent objects so sending the same object twice (even if modified)
-						//								results in a non updated version of the object on the remote side.
-						//								After banging my head against the wall I discovered reset() which essentially recreates a fresh object stream
-						//								Still a sub-optimal solution
+						//NOTE: 	ObjectOutputStream maintains a cache of sent objects so sending the same object twice (even if modified)
+						//			results in a non updated version of the object on the remote side.
+						//			After banging my head against the wall I discovered reset() which essentially recreates a fresh object stream
+						//			Still a sub-optimal solution
 						objectOutputStream.reset();	
 						objectOutputStream.writeObject(frame);
-						System.out.println("ReSent Frame " + frame.getSequenceNumber() + " : " + frame.getData());
+						System.out.println("Re-sent Frame " + frame.getSequenceNumber() + " : " + frame.getData());
 						System.out.println();
 						nackReceived = false;
 					}
-				}	else if(frames.size() < WINDOW_SIZE && c != -1) {
+				} 
+				else if(frames.size() < WINDOW_SIZE && c != -1) {
+					// Can send next frame
 					byte[] bytes = new byte[8];
 					short byteCounter = 0;
 					for(int i=0;i<8;i++) {
@@ -178,7 +178,9 @@ public class MyClient extends Thread {
 					sequenceNumber++;
 				} else {
 					try {
-						System.out.println("Frame Full (" + frames.size() + ") or end of file Sleeping for 500ms");
+						if(c != -1){
+							System.out.println("Sleeping for 10ms as frame buffer is full\n");
+						}
 						sleep(TRANSMITER_SLEEP_TIME);
 					} catch (InterruptedException e) {
 						System.out.println("Thread awoken early : " + e);

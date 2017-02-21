@@ -109,15 +109,6 @@ public class Frame implements Serializable{
 	}
 	
 	
-	// TEMP
-	public void setData(){
-		for(int i=0;i<data.length;i++){
-			data[i] = 'x';
-		}
-	}
-	
-	
-	
 	
 	private void gremlin(){
 		Random r = new Random();
@@ -144,15 +135,15 @@ public class Frame implements Serializable{
 
 			else if(random == 8){
 				System.out.println("GREMLIN : Corrupting Data on frame " + sequenceNumber);
-				// always corrupt first byte
+				// always corrupt first byte with star
 				data[0] = '*';
 				
-				// randomly corrupt rest of bytes
-//				for(int i=1;i<data.length;i++){
-//					if(r.nextInt(2) == 1){
-//						data[i] = (byte)r.nextInt(256);
-//					}
-//				}
+//				randomly corrupt rest of bytes
+				for(int i=1;i<data.length;i++){
+					if(r.nextInt(2) == 1){
+						data[i] = (byte)r.nextInt(256);
+					}
+				}
 			}
 			else if(random == 9){
 				System.out.println("GREMLIN : Corrupting Remainder on frame " + sequenceNumber);

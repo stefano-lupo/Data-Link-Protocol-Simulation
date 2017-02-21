@@ -28,6 +28,7 @@ public class MyServer extends Thread{
 			myServer.serverSocket.close();
 		} catch (Exception e) {
 			System.out.println("Exception closing sockets");
+			e.printStackTrace();
 		}
 
 		// Write result to file
@@ -39,13 +40,13 @@ public class MyServer extends Thread{
 	ServerSocket serverSocket;
 	Socket server;
 	private static int portNum = 8084;
-	private static final int WINDOW_SIZE = 2;
-	private static final int TRANSMITER_SLEEP_TIME = 100;		// Thread Sleep time before checking buffer
+	private static final int WINDOW_SIZE = 8;
+	private static final int TRANSMITER_SLEEP_TIME = 10;		// Thread Sleep time before checking buffer
 	private static final int RECEIVER_TIMEOUT_TIME = 5000;		// How long to wait for frame on input stream before shutting down
 
 	private ArrayList<Frame> successfulFrames;
 	private ArrayList<Frame> bufferFrames; 
-	private ArrayList<Frame> inputStreamClog;
+	private ArrayList<Frame> inputStreamCache;
 	int nextFrameIndex;
 	private volatile boolean running = false;
 	private volatile boolean nack = false, checkingNack = false;
@@ -55,7 +56,7 @@ public class MyServer extends Thread{
 	public MyServer(int port) {
 		successfulFrames = new ArrayList<>();
 		bufferFrames = new ArrayList<>();
-		inputStreamClog = new ArrayList<>();
+		inputStreamCache = new ArrayList<>();
 		nextFrameIndex = 1;
 		System.out.println("-------------------------Server--------------------------------");
 		try {
@@ -84,7 +85,7 @@ public class MyServer extends Thread{
 			ObjectInputStream objectInputStream = new ObjectInputStream(dataInputStream);
 			while(running){
 				if(!checkingNack) {
-					if(inputStreamClog.isEmpty()){
+					if(inputStreamCache.isEmpty()){
 						try{
 							server.setSoTimeout(RECEIVER_TIMEOUT_TIME);
 							Frame frame =(Frame)objectInputStream.readObject();
@@ -96,7 +97,6 @@ public class MyServer extends Thread{
 								nack = false;
 								nextFrameIndex ++;
 							} else {
-								System.out.println("RECEIVER to TRANSMITTER: Need a retransmit for frame " + nextFrameIndex);
 								nack = true;
 								nackIndex = nextFrameIndex;
 								checkingNack = true;		// this is set by other thread otherwise this thread would straight away read the next input
@@ -106,21 +106,22 @@ public class MyServer extends Thread{
 							System.out.println("Class not found while unpacking frame");
 						} 
 					} else {
-						Frame frame = inputStreamClog.get(0);
-						System.out.println("RECEIVER: Taking clogged frame :" + nextFrameIndex);
+						Frame frame = inputStreamCache.get(0);
+						System.out.println("RECEIVER: Taking cached frame :" + nextFrameIndex);
 						System.out.println("RECEIVER: Checking CRC");
 						System.out.print("RECEIVER: ");
 						if(frame.checkCRC()){
 							bufferFrames.add(frame);
 							nack = false;
 							nextFrameIndex ++;
-							inputStreamClog.remove(0);
+//							inputStreamClog.remove(0);
 						} else {
-							System.out.println("RECEIVER to TRANSMITTER: Need a retransmit for frame " + nextFrameIndex);
 							nack = true;
 							nackIndex = nextFrameIndex;
 							checkingNack = true;		// this is set by other thread otherwise this thread would straight away read the next input
 						}
+						inputStreamCache.remove(0);
+						System.out.println();
 					}
 				} else{
 					// Currently checking nack (retransmission mode)
@@ -135,12 +136,13 @@ public class MyServer extends Thread{
 							if(frame.getSequenceNumber() == nackIndex){
 								//TODO: handle CRC on retransmitted correct index frame
 								// got to our retransmitted frame
-								System.out.println("Got frame " + frame.getSequenceNumber() + " - Note no crc checking here : " +frame.getData());
+								System.out.println("RECEIVER: Received Re-sent frame " + frame.getSequenceNumber() + " - Note no crc checking here : " +frame.getData());
+								System.out.println();
 								bufferFrames.add(frame);
 								nextFrameIndex++;
 								break;
 							} else {
-								inputStreamClog.add(frame);
+								inputStreamCache.add(frame);
 							}
 
 						} catch (ClassNotFoundException classNotFoundException){
@@ -152,6 +154,8 @@ public class MyServer extends Thread{
 					checkingNack = false;
 				}
 			}
+			dataInputStream.close();
+			objectInputStream.close();
 		}catch (SocketTimeoutException sto){
 			// No data on input stream within timeout period: Shut Down
 			System.out.println("Listener Socket Timed after " + RECEIVER_TIMEOUT_TIME/1000 + "s");
@@ -172,24 +176,23 @@ public class MyServer extends Thread{
 	@Override
 	public void run() {
 		try{
-			System.out.println("Statrting Transmitter Thread");
 			DataOutputStream dataOutputStream = new DataOutputStream(server.getOutputStream());
 			ObjectOutputStream objectOutputStream = new ObjectOutputStream(dataOutputStream);
 
 			while(running){
 				if(nack){
+					// Send nack
 					byte[] data = {'n'};
 					Frame frame = new Frame((short)nackIndex, (short)1, data);
-					System.out.println("TRANSMITTER: Sending NACK for frame " + nackIndex);
+					System.out.println("\nTRANSMITTER: Sending NACK for frame " + nackIndex);
 					objectOutputStream.writeObject(frame);
 					nack = false;
-					//					checkingNack = false;
 				} else if((bufferFrames.size() % WINDOW_SIZE)== 0 && bufferFrames.size() >0){
 					// Send ACK
 					byte[] data = {'a'};
 					short lastSequenceNumber = (short)bufferFrames.get(bufferFrames.size()-1).getSequenceNumber();
 					Frame frame = new Frame(lastSequenceNumber, (short)1, data);
-					System.out.println("TRANSMITTER: Sending ACK for frames up to frame " + lastSequenceNumber);
+					System.out.println("TRANSMITTER: Sending ACK for frames up to frame " + lastSequenceNumber + "\n");
 					objectOutputStream.writeObject(frame);
 
 					// Add buffer frames to success frames and reset buffer
@@ -205,6 +208,9 @@ public class MyServer extends Thread{
 				}
 			}
 
+			dataOutputStream.close();
+			objectOutputStream.close();
+			
 			// Catch Opening Streams Exceptions
 		} catch (IOException e) {
 			System.out.println("IOException talking to client");
@@ -214,6 +220,9 @@ public class MyServer extends Thread{
 
 
 	private void writeToFile(){
+		if(!bufferFrames.isEmpty()){
+			successfulFrames.addAll(bufferFrames);
+		}
 		System.out.println("\nFinished Receiving " + successfulFrames.size() + " frames from client");
 		// Write to file
 		PrintWriter out;
