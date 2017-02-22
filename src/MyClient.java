@@ -20,8 +20,8 @@ public class MyClient extends Thread {
 	private static String serverName = "localhost";
 	private static Socket client;
 
-	private static final int WINDOW_SIZE = 8;
-	private static final int TRANSMITER_SLEEP_TIME = 10;		// Thread Sleep time before checking buffer
+	private static final int WINDOW_SIZE = 2;
+	private static final int TRANSMITER_SLEEP_TIME = 100;		// Thread Sleep time before checking buffer
 	private static final int RECEIVER_TIMEOUT_TIME = 5000;		// How long to wait for frame on input stream before shutting down
 
 	private static volatile boolean running = false;
@@ -170,12 +170,28 @@ public class MyClient extends Thread {
 							System.out.println(e);
 						}
 					}
-					Frame frame = new Frame(sequenceNumber, byteCounter, bytes);
-					objectOutputStream.writeObject(frame);
-					System.out.println("Sent Frame " + frame.getSequenceNumber() + " to server");
-					System.out.println();
-					frames.add(frame);
-					sequenceNumber++;
+
+					if(byteCounter != 0) {
+						// if last frame was full 8 bits, when the next frame comes and sees end of file it still sends the empty
+						// frame - so test if actually any bytes in the frame
+						Frame frame = null;
+						if(byteCounter != 8) {
+							// non full frame -- bytes array is not of size 8 - need new byte array
+							byte[] nonFullFrameData = new byte[byteCounter];
+							for(int i=0;i<byteCounter;i++) {
+								nonFullFrameData[i] = bytes[i];
+							}
+							frame = new Frame(sequenceNumber, byteCounter, nonFullFrameData);
+						} else {
+							frame = new Frame(sequenceNumber, byteCounter, bytes);
+						}
+
+						objectOutputStream.writeObject(frame);
+						System.out.println("Sent Frame " + frame.getSequenceNumber() + " to server : " + frame.getData());
+						System.out.println();
+						frames.add(frame);
+						sequenceNumber++;
+					}
 				} else {
 					try {
 						if(c != -1){

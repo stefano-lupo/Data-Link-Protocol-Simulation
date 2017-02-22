@@ -40,8 +40,8 @@ public class MyServer extends Thread{
 	ServerSocket serverSocket;
 	Socket server;
 	private static int portNum = 8084;
-	private static final int WINDOW_SIZE = 8;
-	private static final int TRANSMITER_SLEEP_TIME = 10;		// Thread Sleep time before checking buffer
+	private static final int WINDOW_SIZE = 2;
+	private static final int TRANSMITER_SLEEP_TIME = 100;		// Thread Sleep time before checking buffer
 	private static final int RECEIVER_TIMEOUT_TIME = 5000;		// How long to wait for frame on input stream before shutting down
 
 	private ArrayList<Frame> successfulFrames;
@@ -221,6 +221,8 @@ public class MyServer extends Thread{
 
 	private void writeToFile(){
 		if(!bufferFrames.isEmpty()){
+			// TODO: Send acks for these frames
+			System.out.println("Lingering Buffer Frames being added to successful frames");
 			successfulFrames.addAll(bufferFrames);
 		}
 		System.out.println("\nFinished Receiving " + successfulFrames.size() + " frames from client");
@@ -230,7 +232,7 @@ public class MyServer extends Thread{
 			out = new PrintWriter("src/output.txt");
 			String s = "";
 			for(Frame frame : successfulFrames) {
-				System.out.println("Frame " + frame.getSequenceNumber() + ": " + frame.getData());
+				System.out.println("Frame " + frame.getSequenceNumber() + ": " + frame.getData() +" [" + frame.getData().length() + "]");
 				s += frame.getData();
 			}
 			System.out.println(s);
