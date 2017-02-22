@@ -1,4 +1,3 @@
-
 /*
  * 	Student:		Stefano Lupo
  *  Student No:		14334933
@@ -8,12 +7,13 @@
  */
 
 
-/*
+/**
  * 	The CRC class is responsible for examining a Frame object and performing a CRC-16 algorithm to 
  *  compute the checksum that must be placed in the trailer of the frame. It is also responsible for
  *  examining a Frame object which has already had it's checksum calculated and verifying that the data
  *  has or hasn't been corrupted.
  */
+
 public class CRC {
 	private final static int GENERATOR = 47933;				//0xBB3D Polynomial
 	private final static int GENERATOR_LENGTH = 16;

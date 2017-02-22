@@ -15,17 +15,22 @@ public class MyServer extends Thread{
 
 
 	public static void main(String[] args) {
-		MyServer myServer = new MyServer(8083);
+		MyServer myServer = new MyServer(8084);
 
 		myServer.start();										// Transmitter thread
 		myServer.listen();										// Listening Thread
 
+		try{
+			myServer.join();
+		} catch (InterruptedException e) {
+			System.out.println("Interuption while waiting for transmitter to send final ack");
+		}
 
 		// Once finished listening: Tidy up
 		try{
 			System.out.println("Terminating Connection");
-			myServer.server.close();
-			myServer.serverSocket.close();
+			//myServer.server.close();
+			//myServer.serverSocket.close();
 		} catch (Exception e) {
 			System.out.println("Exception closing sockets");
 			e.printStackTrace();
@@ -40,7 +45,7 @@ public class MyServer extends Thread{
 	ServerSocket serverSocket;
 	Socket server;
 	private static int portNum = 8084;
-	private static final int WINDOW_SIZE = 2;
+	private static final int WINDOW_SIZE = 3;
 	private static final int TRANSMITER_SLEEP_TIME = 100;		// Thread Sleep time before checking buffer
 	private static final int RECEIVER_TIMEOUT_TIME = 5000;		// How long to wait for frame on input stream before shutting down
 
@@ -114,7 +119,6 @@ public class MyServer extends Thread{
 							bufferFrames.add(frame);
 							nack = false;
 							nextFrameIndex ++;
-//							inputStreamClog.remove(0);
 						} else {
 							nack = true;
 							nackIndex = nextFrameIndex;
@@ -128,7 +132,7 @@ public class MyServer extends Thread{
 					server.setSoTimeout(RECEIVER_TIMEOUT_TIME);
 					// The retransmistted frame will most likely be behind some other frames in the input stream
 					// If we flushed the input stream, we would use go back n
-					// We need to extract our retransmitted frame, verify it, add it to buffer and then sort through clogged frames
+					// We need to extract our retransmitted frame, verify it, add it to buffer and then sort through cached frames
 
 					while(true){
 						try{
@@ -208,23 +212,29 @@ public class MyServer extends Thread{
 				}
 			}
 
+			if(!bufferFrames.isEmpty()){
+				// TODO: Send acks for these frames
+				System.out.println("Adding remaining buffer frames to succesful frames");
+				successfulFrames.addAll(bufferFrames);
+				byte[] data = {'a'};
+				Frame ack = new Frame(bufferFrames.get(bufferFrames.size()-1).getSequenceNumber(), (short)1, data);
+				System.out.println("Ack sent for "+ack.getSequenceNumber());
+				objectOutputStream.writeObject(ack);
+			}
 			dataOutputStream.close();
 			objectOutputStream.close();
 			
 			// Catch Opening Streams Exceptions
 		} catch (IOException e) {
 			System.out.println("IOException talking to client");
+			e.printStackTrace();
 		}
 
 	}
 
 
 	private void writeToFile(){
-		if(!bufferFrames.isEmpty()){
-			// TODO: Send acks for these frames
-			System.out.println("Lingering Buffer Frames being added to successful frames");
-			successfulFrames.addAll(bufferFrames);
-		}
+
 		System.out.println("\nFinished Receiving " + successfulFrames.size() + " frames from client");
 		// Write to file
 		PrintWriter out;

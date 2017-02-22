@@ -1,3 +1,20 @@
+/*
+ * 	Student:		Stefano Lupo
+ *  Student No:		14334933
+ *  Degree:			JS Computer Engineering
+ *  Course: 		3D3 Computer Networks
+ *  Date:			21/02/2017
+ */
+
+
+/**
+ * The Client class is responsible for reading the data to be sent across the network from a text file and packaging it 
+ * up in Frame objects. The Client uses the Continuous RQ, Selective Repeat protocol. To accomplish this it transmits up 
+ * to WINDOW_SIZE Frames to the server and maintains a buffer of those frames. It will not send any further frames until it
+ * receives acknowledgment that the previous frames arrived un-corrupted. On receipt of a negative acknowledgement (nack), 
+ * the client retrieves a fresh copy of the corrupted frame from its buffer and retransmits this frame.
+ */
+
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
@@ -12,47 +29,87 @@ import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 
 
-
-
-
 public class MyClient extends Thread {
+	// Server and Sockets information
 	private static int portNum = 8084;
 	private static String serverName = "localhost";
 	private static Socket client;
 
-	private static final int WINDOW_SIZE = 2;
-	private static final int TRANSMITER_SLEEP_TIME = 100;		// Thread Sleep time before checking buffer
-	private static final int RECEIVER_TIMEOUT_TIME = 5000;		// How long to wait for frame on input stream before shutting down
+	/**
+	 * The maximum number of frames allowed outstanding between client and server
+	 */
+	private static final int WINDOW_SIZE = 3;
 
+	/**
+	 * Time(ms) for transmitter thread to sleep for after seeing a full buffer.
+	 */
+	private static final int TRANSMITER_SLEEP_TIME = 100;		
+
+	/**
+	 * How long (ms) receiver will wait for a frame from the server before shutting down.
+	 */
+	private static final int RECEIVER_TIMEOUT_TIME = 6000;	
+
+	/**
+	 * Boolean used to communicate between receiver and transmitter thread.
+	 */
 	private static volatile boolean running = false;
+
+	/**
+	 * Buffer containing frames that have been sent to the server but not yet acknowledged.
+	 * Maximum length of WINDOW_SIZE
+	 */
 	private static ArrayList<Frame> frames;
 
+	/**
+	 * Boolean that is set by receiver thread (on receipt of a nack) and un-set by transmitter 
+	 * (on retransmission of nack'd frame) indicating that a nack has been received, and that 
+	 * the relevant frame retransmitted, respectively.
+	 */
 	private volatile boolean nackReceived = false;
+
+	/**
+	 * The sequence number of the missing frame
+	 */
 	private int nackIndex;
 
 
 	public static void main(String[] args){
+
+		// Initialize 
 		frames = new ArrayList<>();
-
-
 		MyClient myClient = new MyClient();
 		try {
 			client = new Socket(serverName, portNum);
 			client.setSoTimeout(RECEIVER_TIMEOUT_TIME);
-
 			running = true;
+
+			// Start transmission thread
 			myClient.start();
+
+			// Start receiving thread
 			myClient.listen();
 
-			// Finished Listening - close connection
+			// Receiving code has completed at this point
 			running = false;
 
-		} catch (SocketException e) {
-			System.out.println("Scoket exception");
+			// Wait for transmission to be finished
+			myClient.join();
+
+			// Close connection
+			client.close();
+		} 
+
+		// Catch required exceptions
+		catch(InterruptedException e){
+			System.out.println("Main program interupted while waiting for transmission thread to close");
+		}
+
+		catch (SocketException e) {
+			System.out.println("Socket Exception occured while attempting to connect to server");
 		}
 		catch (SocketTimeoutException e) {
 			System.out.println("Client connection timeout");
-			running = false;
 		}
 		catch (IOException e) {
 			e.printStackTrace();
@@ -60,43 +117,61 @@ public class MyClient extends Thread {
 	}
 
 
-	// Listen for data from server
+	/**
+	 * Repeatedly checks the input stream for Frames. Upon receipt of a frame, checks whether frame is an ack
+	 * or a nack and communicates to transmitter thread accordingly. Called by main thread.  
+	 */
 	public void listen(){
 		try{
+			// Create input streams
 			DataInputStream dataInputStream = new DataInputStream(client.getInputStream());
 			ObjectInputStream objectInputStream = new ObjectInputStream(dataInputStream);
+
+			// Begin polling
 			while(running){
 				try{
+					// Reset clock indicating how long to wait for frame
 					client.setSoTimeout(RECEIVER_TIMEOUT_TIME);
+
+					// Attempt to read frame from input stream
 					Frame frame =(Frame)objectInputStream.readObject();
 
+					// Frame has been read, process it's contents.
 					if(frame.getData().equals("a")){
 						System.out.println("ACK received : " + frame.getSequenceNumber());
-						//wake writer thread with interupt exception or notify?
+						// Ack received - clear buffered frames
 						frames.clear();
 						nackReceived = false;
-					} else if(frame.getData().equals("n")){
+					} 
+
+					else if(frame.getData().equals("n")){
 						System.out.println("NACK received for " + frame.getSequenceNumber());
 						nackReceived = true;
 						nackIndex = frame.getSequenceNumber();
 
 					}
-				} catch (SocketTimeoutException e) {
-					System.out.println("Timeout Occured");
+				} 
+
+				// Catch Exceptions
+				catch (SocketTimeoutException e) {
+					System.out.println("Timeout Occured while waiting on ack/nack from server");
 					return;
-				} catch (ClassNotFoundException e) {
-					System.out.println("Class not found in listening");
-				} catch (EOFException eofe){
-					System.out.println("Finished Listening");
+				} 
+
+				catch (ClassNotFoundException e) {
+					System.out.println("Error reading frame from input stream - class not found");
+				} 
+
+				catch (EOFException eofe){
+					System.out.println("Finished Receiving : Connection closed by server");
 					return;
 				}
-
 			}
 		}
 
 		// Catch Opening Streams Exceptions
 		catch (IOException e) {
-			System.out.println("Exception before loop");
+			System.out.println("Error opening input streams on receiving thread");
 			e.printStackTrace();
 		}
 	}
@@ -111,25 +186,30 @@ public class MyClient extends Thread {
 	@Override
 	public void run(){
 		try{
+			// Create output streams
 			DataOutputStream dataOutputStream = new DataOutputStream(client.getOutputStream());
 			ObjectOutputStream objectOutputStream = new ObjectOutputStream(dataOutputStream);
 
 			// Start sending frames
-			int c = 0;
+			int byteValue = 0;
 			short sequenceNumber = 1;
 			FileInputStream in = null;
 
 			try {
 				in = new FileInputStream("src/data.txt");
 			} catch (FileNotFoundException e) {
-				e.printStackTrace();
+				System.out.println("Error opening file : data.txt");
 			}
+
+			// Begin transmission
 			while(running) {
 
-				// Check if we can send next frame
+				// Check if a nack has been received (Re-Transmission mode)
 				if(nackReceived){
 					Frame frame = null;
 					boolean frameFound = false;
+
+					// Search for corrupted frame in buffer (by unique sequence number)
 					for(Frame f : frames){
 						if(f.getSequenceNumber() == nackIndex){
 							frame = f;
@@ -139,45 +219,60 @@ public class MyClient extends Thread {
 						}
 					}
 
+					// If frame was not found: serious problem (should never occur)
 					if(!frameFound){
 						System.out.println("NACK'd Frame not found in Clients buffer - BAD NEWS: " + nackIndex);
-					} else{
+						return;
+					} 
 
-						//NOTE: 	ObjectOutputStream maintains a cache of sent objects so sending the same object twice (even if modified)
-						//			results in a non updated version of the object on the remote side.
-						//			After banging my head against the wall I discovered reset() which essentially recreates a fresh object stream
-						//			Still a sub-optimal solution
-						objectOutputStream.reset();	
-						objectOutputStream.writeObject(frame);
-						System.out.println("Re-sent Frame " + frame.getSequenceNumber() + " : " + frame.getData());
-						System.out.println();
-						nackReceived = false;
-					}
+					/*
+					 * ObjectOutputStream maintains a cache of sent objects so sending the same object twice,
+					 * (even if modified) results in a non updated version of the object on the remote side.
+					 * Resetting the output stream results in retransmitted objects being updated. 
+					 * NOTE: 	This is different to flushing the output streams as frames that are on the output
+					 * 			stream are NOT removed. 
+					 */
+					objectOutputStream.reset();	
+					objectOutputStream.writeObject(frame);
+					System.out.println("Re-sent Frame " + frame.getSequenceNumber() + " : " + frame.getData());
+					System.out.println();
+					nackReceived = false;
+
 				} 
-				else if(frames.size() < WINDOW_SIZE && c != -1) {
-					// Can send next frame
+				
+				// No nack received - attempt to transmit more frames
+				else if(frames.size() < WINDOW_SIZE && byteValue != -1) {
+					// Generate byte array of next 8 characters
 					byte[] bytes = new byte[8];
 					short byteCounter = 0;
 					for(int i=0;i<8;i++) {
 						try {
-							c = in.read();
-							if(c == -1) {
+							byteValue = in.read();
+							// If end of file is reached, transmit frame
+							if(byteValue == -1) {
 								break;
 							} 
-							bytes[i] = (byte)c;
+							bytes[i] = (byte)byteValue;
 							byteCounter++;
-						} catch (IOException e) {
+						} 
+						// Catch File IO Exception
+						catch (IOException e) {
 							System.out.println(e);
 						}
 					}
 
+					/* If above data read the final 8 bytes of the file, the next iteration will reach the 
+					 * end of the file and attempt to transmit an invalid frame.
+					 * In this case the byte counter will be zero and thus this proble can be filtered out.
+					 */
 					if(byteCounter != 0) {
-						// if last frame was full 8 bits, when the next frame comes and sees end of file it still sends the empty
-						// frame - so test if actually any bytes in the frame
+						// Must handle the case where the final frame did not contain full 8 characters
 						Frame frame = null;
 						if(byteCounter != 8) {
-							// non full frame -- bytes array is not of size 8 - need new byte array
+							// make a new array of appropriate length
 							byte[] nonFullFrameData = new byte[byteCounter];
+							
+							// fill it with the data
 							for(int i=0;i<byteCounter;i++) {
 								nonFullFrameData[i] = bytes[i];
 							}
@@ -186,26 +281,33 @@ public class MyClient extends Thread {
 							frame = new Frame(sequenceNumber, byteCounter, bytes);
 						}
 
+						// Send the Frame
 						objectOutputStream.writeObject(frame);
-						System.out.println("Sent Frame " + frame.getSequenceNumber() + " to server : " + frame.getData());
-						System.out.println();
+						System.out.println("Sent Frame " + frame.getSequenceNumber() + " to server : " + frame.getData()+"\n");
+						
+						// Add frame to the buffer
 						frames.add(frame);
 						sequenceNumber++;
 					}
-				} else {
+				} 
+				
+				// No nack received and buffer is full
+				else {
 					try {
-						if(c != -1){
-							System.out.println("Sleeping for 10ms as frame buffer is full\n");
+						// Check end of file for printing purposes only
+						if(byteValue != -1){
+							System.out.println("Sleeping for "+TRANSMITER_SLEEP_TIME +"ms as frame buffer is full\n");
 						}
 						sleep(TRANSMITER_SLEEP_TIME);
+
 					} catch (InterruptedException e) {
-						System.out.println("Thread awoken early : " + e);
+						System.out.println("Transmission thread awoken early!");
 					}
 				}
 
 			}
 
-			// One finished reading frames: tidy up
+			// Finished receiving frames - close file.
 			try {
 				in.close();
 			} catch (IOException e) {
