@@ -7,14 +7,6 @@
  */
 
 
-/**
- * The Client class is responsible for reading the data to be sent across the network from a text file and packaging it 
- * up in Frame objects. The Client uses the Continuous RQ, Selective Repeat protocol. To accomplish this it transmits up 
- * to WINDOW_SIZE Frames to the server and maintains a buffer of those frames. It will not send any further frames until it
- * receives acknowledgment that the previous frames arrived un-corrupted. On receipt of a negative acknowledgement (nack), 
- * the client retrieves a fresh copy of the corrupted frame from its buffer and retransmits this frame.
- */
-
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.EOFException;
@@ -28,17 +20,24 @@ import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 
-
+/**
+ * The Client class is responsible for reading the data to be sent across the network from a text file and packaging it 
+ * up in Frame objects. The Client uses the Continuous RQ, Selective Repeat protocol. To accomplish this it transmits up 
+ * to WINDOW_SIZE Frames to the server and maintains a buffer of those frames. It will not send any further frames until it
+ * receives acknowledgment that the previous frames arrived un-corrupted. On receipt of a negative acknowledgement (nack), 
+ * the client retrieves a fresh copy of the corrupted frame from its buffer and retransmits this frame.
+ */
 public class MyClient extends Thread {
 	// Server and Sockets information
 	private static int portNum = 8084;
 	private static String serverName = "localhost";
+	//private static String serverName = "192.168.1.15";		// internal pi address
 	private static Socket client;
 
 	/**
 	 * The maximum number of frames allowed outstanding between client and server
 	 */
-	private static final int WINDOW_SIZE = 3;
+	private static final int WINDOW_SIZE = 15;
 
 	/**
 	 * Time(ms) for transmitter thread to sleep for after seeing a full buffer.
@@ -48,7 +47,7 @@ public class MyClient extends Thread {
 	/**
 	 * How long (ms) receiver will wait for a frame from the server before shutting down.
 	 */
-	private static final int RECEIVER_TIMEOUT_TIME = 6000;	
+	private static final int RECEIVER_TIMEOUT_TIME = 4000;	
 
 	/**
 	 * Boolean used to communicate between receiver and transmitter thread.
@@ -130,15 +129,20 @@ public class MyClient extends Thread {
 			// Begin polling
 			while(running){
 				try{
+					//TODO: Ensure no timeout / long timeout is logical
+					// 		Need a longer timeout here so that the server can timeout while listening for 
+					//		frames from client. This then sends ack for outstanding "odd frames"
+					//		which client can then pick up and be disconected by server
 					// Reset clock indicating how long to wait for frame
-					client.setSoTimeout(RECEIVER_TIMEOUT_TIME);
+					//client.setSoTimeout(RECEIVER_TIMEOUT_TIME);
+//					client.setSoTimeout(1000000);
 
 					// Attempt to read frame from input stream
 					Frame frame =(Frame)objectInputStream.readObject();
 
 					// Frame has been read, process it's contents.
 					if(frame.getData().equals("a")){
-						System.out.println("ACK received : " + frame.getSequenceNumber());
+						System.out.println("ACK received : " + frame.getSequenceNumber()+"\n");
 						// Ack received - clear buffered frames
 						frames.clear();
 						nackReceived = false;

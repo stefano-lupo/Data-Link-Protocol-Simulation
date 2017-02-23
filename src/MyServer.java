@@ -1,3 +1,11 @@
+/*
+ * 	Student:		Stefano Lupo
+ *  Student No:		14334933
+ *  Degree:			JS Computer Engineering
+ *  Course: 		3D3 Computer Networks
+ *  Date:			21/02/2017
+ */
+
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
 import java.io.IOException;
@@ -10,27 +18,51 @@ import java.net.SocketException;
 import java.net.SocketTimeoutException;
 import java.util.ArrayList;
 
-
+/**
+ * The Server Class is responsible for opening a ServerSocket and hosting a client connection. The Server is contains a 
+ * thread for transmitting ACK/NACK frames to the client and a thread for listening for data frames from the client. 
+ * Valid frames received by the server are stored in an ArrayList called bufferFrames. Once this array list reaches the 
+ * designated window size (given by WINDOW_SIZE), the server will then send an acknowledgment frame to the client, 
+ * indicating that it can now receive more frames as once this point is reached, the contents of bufferFrames are added to
+ * the successfulFrames ArrayList and bufferedFrames is cleared. 
+ * 
+ * Upon receipt of a frame the server will evaluate its checksum and detect whether corruption has occurred using the 
+ * CRC-16 algorithm. If corruption has occurred, it will enter re-transmission mode. 
+ * Once retransmission mode has been entered, the server sends a nack to the client requesting them to re-send 
+ * the missing frame. The server will then cache any outstanding frames from the client and accept the resent frame. 
+ * This frame is then re-checked and if it is invalid another retransmission is requested (and so on). 
+ * If it is valid, the server accepts this frame and then proceeds to check the frames that were cached earlier. 
+ * This is the mechanism that allows the server to operate in Continuous RQ, Selective Repeat. 
+ * When an invalid frame occurs, the server caches any outstanding frames and thus only requires retransmission 
+ * of that specific frame. 
+ *
+ */
 public class MyServer extends Thread{
 
 
 	public static void main(String[] args) {
 		MyServer myServer = new MyServer(8084);
 
-		myServer.start();										// Transmitter thread
-		myServer.listen();										// Listening Thread
+		// Start transmission thread
+		myServer.start();			
+		
+		// Start receiver thread
+		myServer.listen();									
 
+		// Server finished receiving, wait until transmission thread is also finished
+		// (sending final ack for "uneven" window count)
 		try{
 			myServer.join();
-		} catch (InterruptedException e) {
+		} 
+		catch (InterruptedException e) {
 			System.out.println("Interuption while waiting for transmitter to send final ack");
 		}
 
 		// Once finished listening: Tidy up
 		try{
 			System.out.println("Terminating Connection");
-			//myServer.server.close();
-			//myServer.serverSocket.close();
+			myServer.server.close();
+			myServer.serverSocket.close();
 		} catch (Exception e) {
 			System.out.println("Exception closing sockets");
 			e.printStackTrace();
@@ -41,80 +73,160 @@ public class MyServer extends Thread{
 
 	}
 
-
+	// Server and Socket INFO
 	ServerSocket serverSocket;
 	Socket server;
-	private static int portNum = 8084;
-	private static final int WINDOW_SIZE = 3;
-	private static final int TRANSMITER_SLEEP_TIME = 100;		// Thread Sleep time before checking buffer
-	private static final int RECEIVER_TIMEOUT_TIME = 5000;		// How long to wait for frame on input stream before shutting down
+	private static final int WINDOW_SIZE = 15;
+	
+	/**
+	 * Time(ms) for transmitter thread to sleep for after seeing a NON full buffer.
+	 */
+	private static final int TRANSMITER_SLEEP_TIME = 100;		
 
+	/**
+	 * How long (ms) receiver will wait for a frame from the client before shutting down.
+	 */
+	private static final int RECEIVER_TIMEOUT_TIME = 3000;	
+	
+	/**
+	 * Holds in order and verified frames from client.
+	 * Valid frames from bufferedFrames are added to this list when the window size is reached 
+	 * and an ACK is sent
+	 */
 	private ArrayList<Frame> successfulFrames;
+	
+	/**
+	 * Holds frames with valid checksum until ACK can be sent.
+	 * Once ACK can be sent, these frames are transferred to successfulFrames and this
+	 * list is cleared for the receipt of more frames.
+	 */
 	private ArrayList<Frame> bufferFrames; 
+	
+	/**
+	 * When an invalid frame arrives, a NACK is issued to the client. Any outstanding frames on the input stream
+	 * must be cached so that the input stream can be cleared to receive the corrupted frame that will be resent 
+	 * by the client. These outstanding frames are cached here. 
+	 * These frames are then processed in order once the previous corrupted frame has been received.
+	 */
 	private ArrayList<Frame> inputStreamCache;
-	int nextFrameIndex;
+	
+	/**
+	 * Holds the next frames expected sequence number (initially 1)
+	 */
+	int nextFrameIndex = 1;
+	
+	/**
+	 * A shared boolean used to cause execution of both threads to end when necessary
+	 */
 	private volatile boolean running = false;
-	private volatile boolean nack = false, checkingNack = false;
+	
+	/**
+	 * A shared boolean which is set by the receiver on receipt of a corrupted frame. 
+	 * This boolean is examined by the transmitter thread, allowing it to know whether it should transmit
+	 * an ACK or a NACK.
+	 */
+	private volatile boolean nack = false;
+	
+	/**
+	 * A shared boolean which indicates that the current frame being checked on the receiver thread is one
+	 * that was re-transmitted as a result of corruption. This results in a frame being read from the cachedFrames
+	 * list as opposed to the bufferedFrames list
+	 */
+	private volatile boolean checkingNack = false;
+	
+	/**
+	 * Holds the expected sequence number of the frame to be re-transmitted
+	 */
 	private int nackIndex;
 
-
+	
 	public MyServer(int port) {
+		// Initialize lists
 		successfulFrames = new ArrayList<>();
 		bufferFrames = new ArrayList<>();
 		inputStreamCache = new ArrayList<>();
-		nextFrameIndex = 1;
 		System.out.println("-------------------------Server--------------------------------");
+
 		try {
-			serverSocket = new ServerSocket(portNum);
-			serverSocket.setSoTimeout(5000);
+			// Open the Socket
+			serverSocket = new ServerSocket(port);
+			
+			// Wait for timeout time for client to connect (optional)
+			serverSocket.setSoTimeout(RECEIVER_TIMEOUT_TIME);
 			System.out.println("Waiting for client on port " + serverSocket.getLocalPort() + "..");
 			server = serverSocket.accept();
-			System.out.println("Just connected to " + server.getRemoteSocketAddress());
-			System.out.println();
+			System.out.println("Just connected to " + server.getRemoteSocketAddress() + "\n");
 			running = true;
-		} catch (SocketException se) {
+		} 
+		
+		// Catch exceptions associated with opening socket
+		catch (SocketException se) {
 			System.out.println("Socket Exception when connecting to client");
+			se.printStackTrace();
 		}
 		catch (SocketTimeoutException ste) {
 			System.out.println("Timeout occured while connecting to client");
-		} catch (IOException io) {
+		} 
+		catch (IOException io) {
 			System.out.println("IO exception when connecting to client");
 		}
 	}
 
 
-	// Listens for frames from client
+	/**
+	 * Receives Frames from client
+	 */
 	public void listen(){
 		try{
+			// Create input streams
 			DataInputStream dataInputStream = new DataInputStream(server.getInputStream());
 			ObjectInputStream objectInputStream = new ObjectInputStream(dataInputStream);
+			
+			// Poll the input streams
 			while(running){
+			
 				if(!checkingNack) {
 					if(inputStreamCache.isEmpty()){
+						// No cached frames - accept next frame on input stream
 						try{
+							// Set allowable time between frames
 							server.setSoTimeout(RECEIVER_TIMEOUT_TIME);
+							
+							// Get frame from input stream
 							Frame frame =(Frame)objectInputStream.readObject();
 							System.out.println("RECEIVER: Received frame " + nextFrameIndex);
 							System.out.println("RECEIVER: Checking CRC");
 							System.out.print("RECEIVER: ");
 							if(frame.checkCRC()){
+								// Frame is valid, add to buffer
 								bufferFrames.add(frame);
 								nack = false;
 								nextFrameIndex ++;
 							} else {
+								// Frame invalid, tell transmitter to request retransmission
 								nack = true;
 								nackIndex = nextFrameIndex;
-								checkingNack = true;		// this is set by other thread otherwise this thread would straight away read the next input
+								// Tell ourselves not to take any more frames until NACK is handled
+								// This boolean is un-set once corrupted frame has been fixed
+								checkingNack = true;
 							}
 							System.out.println();
-						} catch (ClassNotFoundException e) {
-							System.out.println("Class not found while unpacking frame");
 						} 
-					} else {
+						
+						// Catch unpacking exception
+						catch (ClassNotFoundException e) {
+							System.out.println("ERROR: Invalid Frame - Class not found while unpacking frame");
+						} 
+					} 
+					
+					// NOT checking NACK but have cached frames remaining
+					else {
+						// Get next cached frame
 						Frame frame = inputStreamCache.get(0);
-						System.out.println("RECEIVER: Taking cached frame :" + nextFrameIndex);
+						System.out.println("RECEIVER: Taking cached frame :" + nextFrameIndex + " - " + frame.getData());
 						System.out.println("RECEIVER: Checking CRC");
 						System.out.print("RECEIVER: ");
+						// Validate Frame
 						if(frame.checkCRC()){
 							bufferFrames.add(frame);
 							nack = false;
@@ -122,53 +234,74 @@ public class MyServer extends Thread{
 						} else {
 							nack = true;
 							nackIndex = nextFrameIndex;
-							checkingNack = true;		// this is set by other thread otherwise this thread would straight away read the next input
+							checkingNack = true;
 						}
+						// remove cached frame either way (replaced if NACK, saved if ACK)
 						inputStreamCache.remove(0);
 						System.out.println();
 					}
-				} else{
-					// Currently checking nack (retransmission mode)
+				} 
+				
+				// END NOT CHECKING NACK
+				
+				
+				// ELSE CHECKING NACK
+				else{
 					server.setSoTimeout(RECEIVER_TIMEOUT_TIME);
-					// The retransmistted frame will most likely be behind some other frames in the input stream
-					// If we flushed the input stream, we would use go back n
-					// We need to extract our retransmitted frame, verify it, add it to buffer and then sort through cached frames
+					// The re-transmitted frame will most likely be behind some other frames in the input stream
+					// We must cache these frames to avoid having to re-transmit those also (go back n)
+					// We need to find our retransmitted frame and add it to cachedFrames[0] so it will be checked first 
+					// and consume the NACK
 
 					while(true){
 						try{
 							Frame frame =(Frame)objectInputStream.readObject();
+							//TODO: Corrupt this frame
+							// IF checking CRC here can add it straight to bufferedFrames
+							// NEed to to think how to consume this nack and recreate new one
+							// Something to do with checking window size and timeout
 							if(frame.getSequenceNumber() == nackIndex){
-								//TODO: handle CRC on retransmitted correct index frame
-								// got to our retransmitted frame
-								System.out.println("RECEIVER: Received Re-sent frame " + frame.getSequenceNumber() + " - Note no crc checking here : " +frame.getData());
+								// Found retransmitted frame
+								System.out.println("RECEIVER: Received retransmitted " + frame.getSequenceNumber() + " - updating cache");
 								System.out.println();
-								bufferFrames.add(frame);
-								nextFrameIndex++;
+								// Place it at start of the list so it will be examined first
+								inputStreamCache.add(0, frame);
 								break;
 							} else {
+								// Add frame to cached list 
 								inputStreamCache.add(frame);
 							}
-
-						} catch (ClassNotFoundException classNotFoundException){
+						} 
+						
+						// Catch unpacking exception
+						catch (ClassNotFoundException classNotFoundException){
 							System.out.println("Clas not found");
 						}
 					}
-
-					nack = false; // restart transmitting (ie looking at buffer frames)
+					
+					// Retransmitted frame found - consume NACK
+					nack = false;
 					checkingNack = false;
 				}
 			}
+			
+			// Finished Receiving - close data streams
 			dataInputStream.close();
 			objectInputStream.close();
-		}catch (SocketTimeoutException sto){
-			// No data on input stream within timeout period: Shut Down
-			System.out.println("Listener Socket Timed after " + RECEIVER_TIMEOUT_TIME/1000 + "s");
+		}
+		
+		// Catch timeout
+		catch (SocketTimeoutException sto){
+			// No data on input stream within timeout period
+			System.out.println("Listener Socket Timed out after " + RECEIVER_TIMEOUT_TIME/1000 + "s");
 			if(checkingNack){
 				System.out.println("Timeout occured waiting for retransmission of " + nackIndex);
 			}
 			running = false;
 			return;
-		}catch (IOException e) {
+		}
+		
+		catch (IOException e) {
 			System.out.println("Error Creating Input Streams on listener thread");
 			e.printStackTrace();
 		}
@@ -188,7 +321,7 @@ public class MyServer extends Thread{
 					// Send nack
 					byte[] data = {'n'};
 					Frame frame = new Frame((short)nackIndex, (short)1, data);
-					System.out.println("\nTRANSMITTER: Sending NACK for frame " + nackIndex);
+					System.out.println("TRANSMITTER: Sending NACK for frame " + nackIndex);
 					objectOutputStream.writeObject(frame);
 					nack = false;
 				} else if((bufferFrames.size() % WINDOW_SIZE)== 0 && bufferFrames.size() >0){
@@ -212,7 +345,9 @@ public class MyServer extends Thread{
 				}
 			}
 
+			System.out.println("finishing transmission loop");
 			if(!bufferFrames.isEmpty()){
+				System.out.println("Buffer frames no emty");
 				// TODO: Send acks for these frames
 				System.out.println("Adding remaining buffer frames to succesful frames");
 				successfulFrames.addAll(bufferFrames);
