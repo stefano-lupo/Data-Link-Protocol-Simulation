@@ -37,17 +37,17 @@ public class MyClient extends Thread {
 	/**
 	 * The maximum number of frames allowed outstanding between client and server
 	 */
-	private static final int WINDOW_SIZE = 4;
+	private static final int WINDOW_SIZE = 2;
 
 	/**
 	 * Time(ms) for transmitter thread to sleep for after seeing a full buffer.
 	 */
-	private static final int TRANSMITER_SLEEP_TIME = 100;		
+	private static final int TRANSMITER_SLEEP_TIME = 10;		
 
 	/**
 	 * How long (ms) receiver will wait for a frame from the server before shutting down.
 	 */
-	private static final int RECEIVER_TIMEOUT_TIME = 4000;	
+	private static final int RECEIVER_TIMEOUT_TIME = 2000;	
 
 	/**
 	 * Boolean used to communicate between receiver and transmitter thread.
@@ -300,7 +300,7 @@ public class MyClient extends Thread {
 					try {
 						// Check end of file for printing purposes only
 						if(byteValue != -1){
-							System.out.println("Sleeping for "+TRANSMITER_SLEEP_TIME +"ms as frame buffer is full\n");
+							//System.out.println("Sleeping for "+TRANSMITER_SLEEP_TIME +"ms as frame buffer is full\n");
 						}
 						sleep(TRANSMITER_SLEEP_TIME);
 

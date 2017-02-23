@@ -82,17 +82,17 @@ public class MyServer extends Thread{
 	// Server and Socket INFO
 	ServerSocket serverSocket;
 	Socket server;
-	private static final int WINDOW_SIZE = 4;
+	private static final int WINDOW_SIZE = 2;
 	
 	/**
 	 * Time(ms) for transmitter thread to sleep for after seeing a NON full buffer.
 	 */
-	private static final int TRANSMITER_SLEEP_TIME = 100;		
+	private static final int TRANSMITER_SLEEP_TIME = 10;		
 
 	/**
 	 * How long (ms) receiver will wait for a frame from the client before shutting down.
 	 */
-	private static final int RECEIVER_TIMEOUT_TIME = 3000;	
+	private static final int RECEIVER_TIMEOUT_TIME = 1000;	
 	
 	/**
 	 * Holds in order and verified frames from client.
@@ -158,7 +158,7 @@ public class MyServer extends Thread{
 			serverSocket = new ServerSocket(port);
 			
 			// Wait for timeout time for client to connect (optional)
-			serverSocket.setSoTimeout(RECEIVER_TIMEOUT_TIME);
+			serverSocket.setSoTimeout(10000);
 			System.out.println("Waiting for client on port " + serverSocket.getLocalPort() + "..");
 			server = serverSocket.accept();
 			System.out.println("Just connected to " + server.getRemoteSocketAddress() + "\n");
@@ -252,55 +252,7 @@ public class MyServer extends Thread{
 				
 				
 				// ELSE CHECKING NACK
-				else{
-					
-					
-					
-					// OLD CODE START
-					
-					/*
-					
-					server.setSoTimeout(RECEIVER_TIMEOUT_TIME);
-					// The re-transmitted frame will most likely be behind some other frames in the input stream
-					// We must cache these frames to avoid having to re-transmit those also (go back n)
-					// We need to find our retransmitted frame and add it to cachedFrames[0] so it will be checked first 
-					// and consume the NACK
-
-					while(true){
-						try{
-							Frame frame =(Frame)objectInputStream.readObject();
-							//TODO: Corrupt this frame
-							// IF checking CRC here can add it straight to bufferedFrames
-							// NEed to to think how to consume this nack and recreate new one
-							// Something to do with checking window size and timeout
-							
-							// the frame we want is the LAST frame in the input stream
-							int x = 0;
-							
-							
-							if(frame.getSequenceNumber() == nackIndex){
-								// Found retransmitted frame
-								System.out.println("RECEIVER: Received retransmitted " + frame.getSequenceNumber() + " - updating cache");
-								System.out.println();
-								// Place it at start of the list so it will be examined first
-								inputStreamCache.add(0, frame);
-								break;
-							} else {
-								// Add frame to cached list 
-								inputStreamCache.add(frame);
-							}
-						} 
-						
-						// Catch unpacking exception
-						catch (ClassNotFoundException classNotFoundException){
-							System.out.println("Clas not found");
-						}
-					}
-					
-					
-					*/
-					
-					// OLD CODE END (need consume nack)
+				else {
 					
 					// Nack Handling
 					
@@ -319,10 +271,28 @@ public class MyServer extends Thread{
 					// Read from input stream a max of WINDOW_SIZE times or until a timeout occurs
 					// A timeout is required as there may not be a full "WINDOW_SIZE" Frames on the input stream
 					// if the corrupted frame was not the first frame in that window
+					
+					
+					// Calculate how many frames should be in input stream at this point
+					int expectedFramesInStream = ((WINDOW_SIZE - ((nextFrameIndex -1)% WINDOW_SIZE))- inputStreamCache.size());
+					
+					System.out.println("Next frame index = " + nextFrameIndex + ", inputCache = " + inputStreamCache.size());
+					System.out.println("Expected frames in input stream = " + expectedFramesInStream);
+					
+					//wait till transmitter sends nack
+					while(nack){}
+					
 					int x = 1;
-					while(x <= WINDOW_SIZE){
+					while(x <= expectedFramesInStream){
 						// Reset the timeout
-						server.setSoTimeout(500);
+						// Timeout is needed as expected number of frames can't know if there is not enough frames 
+						// left on client side
+						// Eg works out correct number of frames that should be left but the clients last block of frames 
+						// weren't of length = window size so there wont be that many in there
+						// In that case just latch the last frame we get by using the time out
+						// This timeout can be long without being degrading performance as it will only happen at most once
+						server.setSoTimeout(200);
+					
 						try{
 							// Create array list in same order as input stream
 							// Last item will be our retransmitted frame
@@ -356,7 +326,7 @@ public class MyServer extends Thread{
 					for(Frame f : inputStreamCache){
 						System.out.print(f.getSequenceNumber()+",");
 					}				
-	
+					System.out.println();
 					
 					// Retransmitted frame found - consume NACK
 					nack = false;
