@@ -76,7 +76,7 @@ public class MyServer extends Thread{
 	// Server and Socket INFO
 	ServerSocket serverSocket;
 	Socket server;
-	private static final int WINDOW_SIZE = 15;
+	private static final int WINDOW_SIZE = 4;
 	
 	/**
 	 * Time(ms) for transmitter thread to sleep for after seeing a NON full buffer.
@@ -309,23 +309,30 @@ public class MyServer extends Thread{
 
 
 
-	// Thread for transmitting frames to client
+	/**
+	 * Thread for transmitting frames to client
+	 */
 	@Override
 	public void run() {
 		try{
+			// Initialize output streams
 			DataOutputStream dataOutputStream = new DataOutputStream(server.getOutputStream());
 			ObjectOutputStream objectOutputStream = new ObjectOutputStream(dataOutputStream);
 
 			while(running){
+				
+				// Check if NACK is to be transmitted
 				if(nack){
-					// Send nack
+					// Send NACK
 					byte[] data = {'n'};
 					Frame frame = new Frame((short)nackIndex, (short)1, data);
 					System.out.println("TRANSMITTER: Sending NACK for frame " + nackIndex);
 					objectOutputStream.writeObject(frame);
 					nack = false;
-				} else if((bufferFrames.size() % WINDOW_SIZE)== 0 && bufferFrames.size() >0){
-					// Send ACK
+				} 
+				
+				else if((bufferFrames.size() % WINDOW_SIZE)== 0 && bufferFrames.size() >0){
+					// Window Size reached, send ACK to client
 					byte[] data = {'a'};
 					short lastSequenceNumber = (short)bufferFrames.get(bufferFrames.size()-1).getSequenceNumber();
 					Frame frame = new Frame(lastSequenceNumber, (short)1, data);
@@ -338,24 +345,28 @@ public class MyServer extends Thread{
 					}
 					bufferFrames.clear();
 				}
+				
 				try{
+					// Sleep to allow Reciver thread to process frames
 					sleep(TRANSMITER_SLEEP_TIME);
 				} catch (InterruptedException e) {
 					System.out.println("Transmitter thread interupted while sleeping");
 				}
 			}
 
-			System.out.println("finishing transmission loop");
 			if(!bufferFrames.isEmpty()){
-				System.out.println("Buffer frames no emty");
-				// TODO: Send acks for these frames
-				System.out.println("Adding remaining buffer frames to succesful frames");
+				// Save remaning buffer frames that have not yet been acked due to not reaching windowSize
+				System.out.println("Adding remaining " + bufferFrames.size() + " buffer frames to succesful frames");
 				successfulFrames.addAll(bufferFrames);
+				
+				// Send client ACK for these frames also
 				byte[] data = {'a'};
 				Frame ack = new Frame(bufferFrames.get(bufferFrames.size()-1).getSequenceNumber(), (short)1, data);
 				System.out.println("Ack sent for "+ack.getSequenceNumber());
 				objectOutputStream.writeObject(ack);
 			}
+			
+			// Close output streams
 			dataOutputStream.close();
 			objectOutputStream.close();
 			
@@ -364,23 +375,29 @@ public class MyServer extends Thread{
 			System.out.println("IOException talking to client");
 			e.printStackTrace();
 		}
-
 	}
 
 
+	/**
+	 * Writes data of all frames contained in successfulFrames ArrayList to src/output.txt
+	 */
 	private void writeToFile(){
-
 		System.out.println("\nFinished Receiving " + successfulFrames.size() + " frames from client");
+		
 		// Write to file
 		PrintWriter out;
 		try {
 			out = new PrintWriter("src/output.txt");
 			String s = "";
+			
+			// Iterate over each frame and create string
 			for(Frame frame : successfulFrames) {
 				System.out.println("Frame " + frame.getSequenceNumber() + ": " + frame.getData() +" [" + frame.getData().length() + "]");
 				s += frame.getData();
 			}
 			System.out.println(s);
+			
+			// Write and close file
 			out.print(s);
 			out.close();
 		} catch(IOException e) {
