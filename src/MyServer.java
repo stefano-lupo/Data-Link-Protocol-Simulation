@@ -8,6 +8,8 @@
 
 import java.io.DataInputStream;
 import java.io.DataOutputStream;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
 import java.io.IOException;
 import java.io.ObjectInputStream;
 import java.io.ObjectOutputStream;
@@ -16,6 +18,8 @@ import java.net.ServerSocket;
 import java.net.Socket;
 import java.net.SocketException;
 import java.net.SocketTimeoutException;
+import java.nio.file.Files;
+import java.nio.file.Paths;
 import java.util.ArrayList;
 
 /**
@@ -71,6 +75,8 @@ public class MyServer extends Thread{
 		// Write result to file
 		myServer.writeToFile();
 
+		// Test results are identical
+		myServer.checkResults();
 	}
 
 	// Server and Socket INFO
@@ -247,6 +253,13 @@ public class MyServer extends Thread{
 				
 				// ELSE CHECKING NACK
 				else{
+					
+					
+					
+					// OLD CODE START
+					
+					/*
+					
 					server.setSoTimeout(RECEIVER_TIMEOUT_TIME);
 					// The re-transmitted frame will most likely be behind some other frames in the input stream
 					// We must cache these frames to avoid having to re-transmit those also (go back n)
@@ -260,6 +273,11 @@ public class MyServer extends Thread{
 							// IF checking CRC here can add it straight to bufferedFrames
 							// NEed to to think how to consume this nack and recreate new one
 							// Something to do with checking window size and timeout
+							
+							// the frame we want is the LAST frame in the input stream
+							int x = 0;
+							
+							
 							if(frame.getSequenceNumber() == nackIndex){
 								// Found retransmitted frame
 								System.out.println("RECEIVER: Received retransmitted " + frame.getSequenceNumber() + " - updating cache");
@@ -278,6 +296,67 @@ public class MyServer extends Thread{
 							System.out.println("Clas not found");
 						}
 					}
+					
+					
+					*/
+					
+					// OLD CODE END (need consume nack)
+					
+					// Nack Handling
+					
+					// The re-transmitted frame will most likely be behind some other frames in the input stream
+					// We must cache these frames to avoid having to re-transmit those also (go back n)
+					// We need to find our retransmitted frame and add it to cachedFrames[0] so it will be checked first 
+					// and consume the NACK
+					
+					
+					// The last frame on the input stream will always be the retransmitted frame
+					// Need to get the last frame from the input stream, cache the others and put the last frame first
+
+					// Max Number of frames on the input stream is window size
+					// This is because although we are retransmitting another frame, that same corrupted frame was 
+					// previously read from the input stream to start the nack process and thus is no longer there
+					// Read from input stream a max of WINDOW_SIZE times or until a timeout occurs
+					// A timeout is required as there may not be a full "WINDOW_SIZE" Frames on the input stream
+					// if the corrupted frame was not the first frame in that window
+					int x = 1;
+					while(x <= WINDOW_SIZE){
+						// Reset the timeout
+						server.setSoTimeout(500);
+						try{
+							// Create array list in same order as input stream
+							// Last item will be our retransmitted frame
+							Frame frame = (Frame)objectInputStream.readObject();
+							System.out.println("Took " + x + "'th object from stream [" + frame.getSequenceNumber() + "]");
+							inputStreamCache.add(frame);
+							x++;
+						}
+						catch (ClassNotFoundException e) {
+							System.out.println("Class not found exception");
+						}
+						catch (SocketTimeoutException e) {
+							System.out.println("socket timeout occured in new code");
+							break;
+						}
+					}
+					
+					
+					// Get the last frame in the list
+					Frame retransmittedFrame = inputStreamCache.get(inputStreamCache.size()-1);
+					
+					
+					// Remove that frame from list
+					inputStreamCache.remove(retransmittedFrame);
+					
+					// Add it back to start of list
+					inputStreamCache.add(0,retransmittedFrame);
+					
+					
+					System.out.print("After Reordering frames from input stream: ");
+					for(Frame f : inputStreamCache){
+						System.out.print(f.getSequenceNumber()+",");
+					}				
+	
 					
 					// Retransmitted frame found - consume NACK
 					nack = false;
@@ -404,6 +483,28 @@ public class MyServer extends Thread{
 			System.out.println(e);
 		}
 	}
-
+	
+	
+	/**
+	 * Checks if what ends up in output.txt matches exactly with data.txt
+	 */
+	private void checkResults(){
+		String data = null;
+		String output = null;
+		
+		try{
+			data = new String(Files.readAllBytes(Paths.get("src/data.txt"))); 
+			output = new String(Files.readAllBytes(Paths.get("src/output.txt")));
+		} catch (IOException e) {
+			e.printStackTrace();
+		}
+		
+		if(data.equals(output)){
+			System.out.println("\nData matches exactly");
+		} else {
+			System.out.println("\nData DOES NOT match");
+		}
+		
+	}
 
 }
