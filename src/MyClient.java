@@ -37,7 +37,7 @@ public class MyClient extends Thread {
 	/**
 	 * The maximum number of frames allowed outstanding between client and server
 	 */
-	private static final int WINDOW_SIZE = 2;
+	private static final int WINDOW_SIZE = 5;
 
 	/**
 	 * Time(ms) for transmitter thread to sleep for after seeing a full buffer.

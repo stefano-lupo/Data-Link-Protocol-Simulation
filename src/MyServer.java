@@ -82,12 +82,12 @@ public class MyServer extends Thread{
 	// Server and Socket INFO
 	ServerSocket serverSocket;
 	Socket server;
-	private static final int WINDOW_SIZE = 2;
+	private static final int WINDOW_SIZE = 5;
 	
 	/**
 	 * Time(ms) for transmitter thread to sleep for after seeing a NON full buffer.
 	 */
-	private static final int TRANSMITER_SLEEP_TIME = 10;		
+	private static final int TRANSMITER_SLEEP_TIME = 50;		
 
 	/**
 	 * How long (ms) receiver will wait for a frame from the client before shutting down.
@@ -229,7 +229,7 @@ public class MyServer extends Thread{
 					else {
 						// Get next cached frame
 						Frame frame = inputStreamCache.get(0);
-						System.out.println("RECEIVER: Taking cached frame :" + nextFrameIndex + " - " + frame.getData());
+						System.out.println("RECEIVER: Taking cached frame " + nextFrameIndex + ": " + frame.getData());
 						System.out.println("RECEIVER: Checking CRC");
 						System.out.print("RECEIVER: ");
 						// Validate Frame
@@ -272,15 +272,15 @@ public class MyServer extends Thread{
 					// A timeout is required as there may not be a full "WINDOW_SIZE" Frames on the input stream
 					// if the corrupted frame was not the first frame in that window
 					
+					//wait till transmitter sends nack
+					while(nack){}
+					
 					
 					// Calculate how many frames should be in input stream at this point
 					int expectedFramesInStream = ((WINDOW_SIZE - ((nextFrameIndex -1)% WINDOW_SIZE))- inputStreamCache.size());
-					
-					System.out.println("Next frame index = " + nextFrameIndex + ", inputCache = " + inputStreamCache.size());
 					System.out.println("Expected frames in input stream = " + expectedFramesInStream);
 					
-					//wait till transmitter sends nack
-					while(nack){}
+	
 					
 					int x = 1;
 					while(x <= expectedFramesInStream){
@@ -297,7 +297,6 @@ public class MyServer extends Thread{
 							// Create array list in same order as input stream
 							// Last item will be our retransmitted frame
 							Frame frame = (Frame)objectInputStream.readObject();
-							System.out.println("Took " + x + "'th object from stream [" + frame.getSequenceNumber() + "]");
 							inputStreamCache.add(frame);
 							x++;
 						}
@@ -322,11 +321,11 @@ public class MyServer extends Thread{
 					inputStreamCache.add(0,retransmittedFrame);
 					
 					
-					System.out.print("After Reordering frames from input stream: ");
+					System.out.print("After Reordering frames from input stream: (");
 					for(Frame f : inputStreamCache){
 						System.out.print(f.getSequenceNumber()+",");
 					}				
-					System.out.println();
+					System.out.println(")\n");
 					
 					// Retransmitted frame found - consume NACK
 					nack = false;
